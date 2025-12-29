@@ -1,26 +1,41 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { Hono } from 'hono';
+import { getJmComicInfo } from './api';
+import { searchs } from './api';
+const app = new Hono();
 
-export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		const url = new URL(request.url);
-		switch (url.pathname) {
-			case '/message':
-				return new Response('Hello, World!');
-			case '/random':
-				return new Response(crypto.randomUUID());
-			default:
-				return new Response('Not Found', { status: 404 });
-		}
-	},
-} satisfies ExportedHandler<Env>;
+app.get('/getInfo/:jmid', async (c) => {
+  const { jmid } = c.req.param();
+  return c.json(await getJmComicInfo(jmid));
+});
+
+app.get('/search', async (c) => {
+  const { jmid, title } = c.req.query();
+  if (!title) {
+    return c.json([{ title: '请输入名称' }]);
+  }
+  const results = [];
+  results.push({
+    site: '*',
+    results: [
+      {
+        title: '该功能暂未正确实现',
+        cover: '',
+        url: `https://18comic.vip/album/${jmid || ''}`,
+      },
+    ],
+  });
+  for (const search of searchs) {
+    results.push({
+      site: search.site,
+      results: await search.search(title),
+    });
+  }
+  return c.json(results);
+});
+
+app.onError((err, c) => {
+  console.error(`${err}`);
+  return c.json({ error: err.message }, 500);
+});
+
+export default app;

@@ -1,32 +1,182 @@
 <!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Hello, World!</title>
-	</head>
-	<body>
-		<h1 id="heading"></h1>
-		<p>This page comes from a static asset stored at `public/index.html` as configured in `wrangler.jsonc`.</p>
-		<button id="button" type="button">Fetch a random UUID</button>
-		<output id="random" for="button"></output>
-		<script>
-			fetch('/message')
-				.then((resp) => resp.text())
-				.then((text) => {
-					const h1 = document.getElementById('heading');
-					h1.textContent = text;
-				});
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fuck JMComic ID</title>
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noimageindex">
+  <script src="https://cdn.jsdelivr.net/gh/kirakiray/ofa.js/dist/ofa.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/kirakiray/ofa.js/libs/scsr/dist/scsr.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sober@1/dist/sober.min.js"></script>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+    }
 
-			const button = document.getElementById("button");
-			button.addEventListener("click", () => {
-				fetch('/random')
-					.then((resp) => resp.text())
-					.then((text) => {
-						const random = document.getElementById('random');
-						random.textContent = text;
-					});
-			});
-		</script>
-	</body>
+    o-app {
+      width: 100%;
+      display: block;
+      position: static;
+    }
+  </style>
+</head>
+<body>
+  <o-app>
+    <template page>
+      <style>
+        .center {
+          text-align: center;
+        }
+
+        .left {
+          text-align: left;
+        }
+
+        .right {
+          text-align: right;
+        }
+      </style>
+      <h1 class="center">Fuck JMComic ID</h1>
+      <div class="center">
+        <s-search id="search" placeholder="JMID" aria-label="JMID" on:input="jmid = $event.target.value">
+          <s-icon name="search" slot="start"></s-icon>
+          <s-icon-button slot="end" on:click="clearSearch($event)">
+            <s-icon name="close"></s-icon>
+          </s-icon-button>
+        </s-search>
+      </div>
+      <div class="center">
+        <x-if :value="comicInfo.name">
+          <s-card style="display: inline-block; max-width: fit-content; padding: 24px; margin: 16px">
+            <div slot="image">
+              <img attr:src="'https://cdn-msp.18comic.vip/media/albums/' + comicInfo.id + '.jpg'" style="height: 160px;" />
+            </div>
+            <div slot="headline">{{comicInfo.name}}</div>
+            <div slot="subhead">{{(comicInfo.author||[]).join(',')}}</div>
+            <div slot="text">{{[...(comicInfo.works||[]), ...(comicInfo.tags||[])].join(',')}}</div>
+            <s-button slot="action" type="filled-tonal" on:click="copyTitle()">
+              <s-icon slot="start">
+                <svg viewBox="0 -960 960 960">
+                  <path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"></path>
+                </svg>
+              </s-icon>
+              复制标题
+            </s-button>
+            <s-button slot="action" on:click="searchOtherSites()">搜索其他站点</s-button>
+          </s-card>
+        </x-if>
+        <x-else>
+          <s-empty>暂时没有数据</s-empty>
+        </x-else>
+      </div>
+      <div class="center">
+        <x-if :value="searchResult.length">
+          <s-table style="overflow: auto; display: block">
+            <s-tbody>
+              <x-fill :value="searchResult">
+                <s-tr style="height: 100px;">
+                  <s-td>{{ $data.site }}</s-td>
+                  <s-td><a attr:href="$data.url" target="_blank">{{ $data.title }}</a></s-td>
+                  <s-td>
+                    <x-if :value="$data.cover">
+                      <img attr:src="$data.cover" />
+                    </x-if>
+                    <x-else>
+                      <s-empty>暂无封面</s-empty>
+                    </x-else>
+                  </s-td>
+                </s-tr>
+              </x-fill>
+            </s-tbody>
+          </s-table>
+        </x-if>
+        <x-else-if :value="comicInfo.name">
+          <s-empty>暂时没有数据</s-empty>
+        </x-else-if>
+      </div>
+      <s-snackbar id="copySuccess" type="success">
+        复制成功
+      </s-snackbar>
+      <script>
+        export default {
+          data: {
+            jmid: '',
+            comicInfo: {},
+            searchResult: [],
+          },
+          ready() {
+            // 回车键搜索
+            const search = this.shadow.$('#search');
+            search.on('keyup', e => {
+              if (e.keyCode === 13) {
+                this.comicInfo = {};
+                this.searchResult = [];
+                this.getJmComicInfo();
+              }
+            });
+          },
+          proto: {
+            async getJmComicInfo() {
+              const jmid = this.jmid;
+              if (!jmid) {
+                return;
+              }
+              const jmComicInfo = await fetch(`/getInfo/${jmid}`)
+                .then(res => res.json())
+                .catch(err => {
+                  alert(err);
+                });
+              this.comicInfo = jmComicInfo || {};
+            },
+            clearSearch(e) {
+              const search = $(e.target).root.$('#search');
+              search.ele.value = '';
+              this.jmid = '';
+              search.ele.focus();
+            },
+            copyTitle() {
+              if (!this.comicInfo.name) {
+                return;
+              }
+              navigator.clipboard.writeText(this.comicInfo.name).then(() => {
+                this.shadow.$('#copySuccess').ele.show();
+              });
+            },
+            async searchOtherSites() {
+              if (!this.comicInfo.name) {
+                return;
+              }
+              const query = new URLSearchParams({
+                jmid: this.jmid,
+                title: this.comicInfo.name,
+              }).toString();
+              const resp = await fetch(`/search?${query}`)
+                .then(res => res.json())
+                .catch(err => {
+                  alert(err);
+                });
+              // [{site: string, results: [{title: string, cover: string, url: string}]}]
+              // 展开成单层数组，包含site
+              const result = resp.reduce((acc, cur) => {
+                return acc.concat(cur.results.map(res => ({
+                  site: cur.site,
+                  ...res,
+                })));
+              }, []);
+              // [{site: string, title: string, cover: string, url: string}]
+
+              console.log('searchOtherSites result:', result);
+
+              this.searchResult = result || [];
+            }
+          }
+        }
+      </script>
+    </template>
+  </o-app>
+</body>
 </html>
