@@ -49,9 +49,12 @@
           </s-icon-button>
         </s-search>
       </div>
-      <div class="center">
-        <x-if :value="comicInfo.name">
-          <s-card style="display: inline-block; max-width: fit-content; padding: 24px; margin: 16px">
+      <div class="center" style="margin: 16px">
+        <x-if :value="loadingComicInfo">
+          <s-circular-progress indeterminate="true"></s-circular-progress>
+        </x-if>
+        <x-else-if :value="comicInfo.name">
+          <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
               <img attr:src="'https://cdn-msp.18comic.vip/media/albums/' + comicInfo.id + '.jpg'" style="height: 160px;" />
             </div>
@@ -68,12 +71,15 @@
             </s-button>
             <s-button slot="action" on:click="searchOtherSites()">搜索其他站点</s-button>
           </s-card>
-        </x-if>
+        </x-else-if>
         <x-else>
           <s-empty>暂时没有数据</s-empty>
         </x-else>
       </div>
-      <div class="center">
+      <div class="center" style="margin: 16px">
+        <x-if :value="loadingSearchResult">
+          <s-circular-progress indeterminate="true"></s-circular-progress>
+        </x-if>
         <x-if :value="searchResult.length">
           <s-table style="overflow: auto; display: block">
             <s-tbody>
@@ -107,6 +113,8 @@
             jmid: '',
             comicInfo: {},
             searchResult: [],
+            loadingComicInfo: false,
+            loadingSearchResult: false,
           },
           ready() {
             // 回车键搜索
@@ -125,10 +133,14 @@
               if (!jmid) {
                 return;
               }
+              this.loadingComicInfo = true;
               const jmComicInfo = await fetch(`/getInfo/${jmid}`)
                 .then(res => res.json())
                 .catch(err => {
                   alert(err);
+                })
+                .finally(() => {
+                  this.loadingComicInfo = false;
                 });
               this.comicInfo = jmComicInfo || {};
             },
@@ -154,10 +166,14 @@
                 jmid: this.jmid,
                 title: this.comicInfo.name,
               }).toString();
+              this.loadingSearchResult = true;
               const resp = await fetch(`/search?${query}`)
                 .then(res => res.json())
                 .catch(err => {
                   alert(err);
+                })
+                .finally(() => {
+                  this.loadingSearchResult = false;
                 });
               // [{site: string, results: [{title: string, cover: string, url: string}]}]
               // 展开成单层数组，包含site
