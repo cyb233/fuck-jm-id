@@ -11,7 +11,7 @@ app.get('/getInfo/:jmid', async (c) => {
 app.get('/search', async (c) => {
   const { jmid, title } = c.req.query();
   if (!title) {
-    return c.json([{ title: '请输入名称' }]);
+    throw new Error('请输入名称');
   }
   const results = [];
   results.push({

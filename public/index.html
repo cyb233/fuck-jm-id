@@ -39,6 +39,10 @@
         .right {
           text-align: right;
         }
+
+        .hide {
+          display: none;
+        }
       </style>
       <l-m src="./component/github-corner.html"></l-m>
       <github-corner href="https://github.com/cyb233/fuck-jm-id"></github-corner>
@@ -76,6 +80,12 @@
         </x-else-if>
         <x-else>
           <s-empty>暂时没有数据</s-empty>
+          <s-alert id="alert" type="error" class:hide="!comicInfoAlert">
+            {{ comicInfoAlert }}
+            <s-icon-button slot="end" on:click="comicInfoAlert = ''">
+              <s-icon name="close"></s-icon>
+            </s-icon-button>
+          </s-alert>
         </x-else>
       </div>
       <div class="center" style="margin: 16px">
@@ -104,6 +114,12 @@
         </x-if>
         <x-else-if :value="comicInfo.name">
           <s-empty>暂时没有数据</s-empty>
+          <s-alert id="alert" type="error" class:hide="!searchResultAlert">
+            {{ searchResultAlert }}
+            <s-icon-button slot="end" on:click="searchResultAlert = ''">
+              <s-icon name="close"></s-icon>
+            </s-icon-button>
+          </s-alert>
         </x-else-if>
       </div>
       <s-snackbar id="copySuccess" type="success">
@@ -117,6 +133,8 @@
             searchResult: [],
             loadingComicInfo: false,
             loadingSearchResult: false,
+            comicInfoAlert: '',
+            searchResultAlert: '',
           },
           ready() {
             // 回车键搜索
@@ -131,15 +149,17 @@
           },
           proto: {
             async getJmComicInfo() {
+              this.clearAlerts();
               const jmid = this.jmid;
               if (!jmid) {
                 return;
               }
               this.loadingComicInfo = true;
-              const jmComicInfo = await fetch(`/getInfo/${jmid}`)
+              const jmComicInfo = await fetch(`/getInfo/${encodeURIComponent(jmid)}`)
                 .then(res => res.json())
                 .catch(err => {
-                  alert(err);
+                  console.error(err);
+                  this.comicInfoAlert = err.message || '获取漫画信息失败';
                 })
                 .finally(() => {
                   this.loadingComicInfo = false;
@@ -147,6 +167,7 @@
               this.comicInfo = jmComicInfo || {};
             },
             clearSearch(e) {
+              this.clearAlerts();
               const search = $(e.target).root.$('#search');
               search.ele.value = '';
               this.jmid = '';
@@ -164,6 +185,7 @@
               if (!this.comicInfo.name) {
                 return;
               }
+              this.searchResultAlert = '';
               const query = new URLSearchParams({
                 jmid: this.jmid,
                 title: this.comicInfo.name,
@@ -172,7 +194,8 @@
               const resp = await fetch(`/search?${query}`)
                 .then(res => res.json())
                 .catch(err => {
-                  alert(err);
+                  console.error(err);
+                  this.searchResultAlert = err.message || '搜索其他站点失败';
                 })
                 .finally(() => {
                   this.loadingSearchResult = false;
@@ -190,7 +213,11 @@
               console.log('searchOtherSites result:', result);
 
               this.searchResult = result || [];
-            }
+            },
+            clearAlerts() {
+              this.comicInfoAlert = '';
+              this.searchResultAlert = '';
+            },
           }
         }
       </script>
