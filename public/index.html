@@ -40,6 +40,8 @@
           text-align: right;
         }
       </style>
+      <l-m src="./component/github-corner.html"></l-m>
+      <github-corner href="https://github.com/cyb233/fuck-jm-id"></github-corner>
       <h1 class="center">Fuck JMComic ID</h1>
       <div class="center">
         <s-search id="search" placeholder="JMID" aria-label="JMID" on:input="jmid = $event.target.value">
@@ -58,7 +60,7 @@
             <div slot="image">
               <img attr:src="'https://cdn-msp.18comic.vip/media/albums/' + comicInfo.id + '.jpg'" style="height: 160px;" />
             </div>
-            <div slot="headline">{{comicInfo.name}}</div>
+            <div slot="headline"><a attr:href="'https://18comic.vip/album/' + comicInfo.id" target="_blank">{{comicInfo.name}}</a></div>
             <div slot="subhead">{{(comicInfo.author||[]).join(',')}}</div>
             <div slot="text">{{[...(comicInfo.works||[]), ...(comicInfo.tags||[])].join(',')}}</div>
             <s-button slot="action" type="filled-tonal" on:click="copyTitle()">
