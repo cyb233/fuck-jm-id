@@ -73,6 +73,7 @@
                 {{comicInfo.author.join(',')}}
               </x-if>
             </div>
+            <div slot="text">ID：{{comicInfo.id}}</div>
             <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
               <div slot="text">作品：{{comicInfo.works.join(',')}}</div>
             </x-if>

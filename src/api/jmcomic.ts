@@ -132,6 +132,9 @@ function decodeRespData(data: string, ts: number, secret?: string): string {
 }
 
 function formatId(jmid: string): string {
-  const match = jmid.match(/(JM)?\s*(\d+)/i);
-  return match ? match[2] : '';
+  // 去除字符，如果存在文本"JM"，提取后面的数字部分，否则去除所有非数字字符
+  if (jmid.includes('JM')) {
+    return jmid.replace(/JM\s*(\d+)/i, '$1');
+  }
+  return jmid.replace(/\D/g, '');
 }
