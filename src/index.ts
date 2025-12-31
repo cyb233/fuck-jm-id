@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getJmComicInfo } from './api';
-import { searchs } from './api';
+import { sites, extractTitle } from './util';
 const app = new Hono();
 
 app.get('/getInfo/:jmid', async (c) => {
@@ -14,20 +14,16 @@ app.get('/search', async (c) => {
     throw new Error('请输入名称');
   }
   const results = [];
-  results.push({
-    site: '*',
-    results: [
-      {
-        title: '该功能暂未正确实现',
-        cover: '',
-        url: `https://18comic.vip/album/${jmid || ''}`,
-      },
-    ],
-  });
-  for (const search of searchs) {
+  let extractedTitle = extractTitle(title);
+  if (!extractedTitle) {
+    extractedTitle = title;
+  }
+  for (const site of sites) {
     results.push({
-      site: search.site,
-      results: await search.search(title),
+      logo: site.logo,
+      site: site.name,
+      title: extractedTitle,
+      search: site.search(extractedTitle),
     });
   }
   return c.json(results);

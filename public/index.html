@@ -62,11 +62,23 @@
         <x-else-if :value="comicInfo.name">
           <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
-              <img attr:src="'https://cdn-msp.18comic.vip/media/albums/' + comicInfo.id + '.jpg'" style="height: 160px;" />
+              <x-if :value="comicInfo.id">
+                <img attr:src="'https://cdn-msp.18comic.vip/media/albums/' + comicInfo.id + '.jpg'" style="height: 160px;" />
+              </x-if>
             </div>
             <div slot="headline"><a attr:href="'https://18comic.vip/album/' + comicInfo.id" target="_blank">{{comicInfo.name}}</a></div>
-            <div slot="subhead">{{(comicInfo.author||[]).join(',')}}</div>
-            <div slot="text">{{[...(comicInfo.works||[]), ...(comicInfo.tags||[])].join(',')}}</div>
+            <div slot="subhead">
+              作者：
+              <x-if :value="comicInfo.author && Array.isArray(comicInfo.author)">
+                {{comicInfo.author.join(',')}}
+              </x-if>
+            </div>
+            <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
+              <div slot="text">作品：{{comicInfo.works.join(',')}}</div>
+            </x-if>
+            <x-if :value="comicInfo.tags && Array.isArray(comicInfo.tags) && comicInfo.tags.length">
+              <div slot="text">标签：{{comicInfo.tags.join(',')}}</div>
+            </x-if>
             <s-button slot="action" type="filled-tonal" on:click="copyTitle()">
               <s-icon slot="start">
                 <svg viewBox="0 -960 960 960">
@@ -96,15 +108,14 @@
           <s-table style="overflow: auto; display: block">
             <s-tbody>
               <x-fill :value="searchResult">
-                <s-tr style="height: 100px;">
-                  <s-td>{{ $data.site }}</s-td>
-                  <s-td><a attr:href="$data.url" target="_blank">{{ $data.title }}</a></s-td>
-                  <s-td>
-                    <x-if :value="$data.cover">
-                      <img attr:src="$data.cover" />
+                <s-tr>
+                  <s-td class="right" style="width: 50%;"><s-icon attr:src="$data.logo"></s-icon>{{ $data.site }}</s-td>
+                  <s-td class="left" style="width: 50%;">
+                    <x-if :value="$data.search">
+                      <a attr:href="$data.search" target="_blank">{{ $data.title }}</a>
                     </x-if>
                     <x-else>
-                      <s-empty>暂无封面</s-empty>
+                      {{ $data.title }}
                     </x-else>
                   </s-td>
                 </s-tr>
@@ -141,9 +152,12 @@
             const search = this.shadow.$('#search');
             search.on('keyup', e => {
               if (e.keyCode === 13) {
-                this.comicInfo = {};
-                this.searchResult = [];
-                this.getJmComicInfo();
+                if (!this.comicInfo.id || this.comicInfo.id != this.jmid || !this.comicInfo.name) {
+                  e.preventDefault();
+                  this.comicInfo = {};
+                  this.searchResult = [];
+                  this.getJmComicInfo();
+                }
               }
             });
           },
@@ -155,16 +169,19 @@
                 return;
               }
               this.loadingComicInfo = true;
-              const jmComicInfo = await fetch(`/getInfo/${encodeURIComponent(jmid)}`)
-                .then(res => res.json())
-                .catch(err => {
-                  console.error(err);
-                  this.comicInfoAlert = err.message || '获取漫画信息失败';
-                })
-                .finally(() => {
-                  this.loadingComicInfo = false;
-                });
-              this.comicInfo = jmComicInfo || {};
+              try {
+                const jmComicInfoResp = await fetch(`/getInfo/${encodeURIComponent(jmid)}`)
+                const jmComicInfo = await jmComicInfoResp.json()
+                if (jmComicInfo.error) {
+                  throw new Error(jmComicInfo.error);
+                }
+                this.comicInfo = jmComicInfo || {};
+              } catch (err) {
+                console.error(err);
+                this.comicInfoAlert = err.message || '获取漫画信息失败';
+              } finally {
+                this.loadingComicInfo = false;
+              }
             },
             clearSearch(e) {
               this.clearAlerts();
@@ -191,28 +208,19 @@
                 title: this.comicInfo.name,
               }).toString();
               this.loadingSearchResult = true;
-              const resp = await fetch(`/search?${query}`)
-                .then(res => res.json())
-                .catch(err => {
-                  console.error(err);
-                  this.searchResultAlert = err.message || '搜索其他站点失败';
-                })
-                .finally(() => {
-                  this.loadingSearchResult = false;
-                });
-              // [{site: string, results: [{title: string, cover: string, url: string}]}]
-              // 展开成单层数组，包含site
-              const result = resp.reduce((acc, cur) => {
-                return acc.concat(cur.results.map(res => ({
-                  site: cur.site,
-                  ...res,
-                })));
-              }, []);
-              // [{site: string, title: string, cover: string, url: string}]
-
-              console.log('searchOtherSites result:', result);
-
-              this.searchResult = result || [];
+              try {
+                const resp = await fetch(`/search?${query}`)
+                const result = await resp.json()
+                if (result.error) {
+                  throw new Error(result.error);
+                }
+                this.searchResult = result || [];
+              } catch (err) {
+                console.error(err);
+                this.searchResultAlert = err.message || '搜索失败';
+              } finally {
+                this.loadingSearchResult = false;
+              }
             },
             clearAlerts() {
               this.comicInfoAlert = '';
