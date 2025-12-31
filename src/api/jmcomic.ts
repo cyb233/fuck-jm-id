@@ -84,7 +84,16 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
 
   // 解密数据
   const decryptedData = decodeRespData(data, timestamp);
-  const parsedData = JSON.parse(decryptedData);
+  let parsedData;
+  try {
+    parsedData = JSON.parse(decryptedData);
+  } catch (error) {
+    // 解析 JSON 失败，输出调试信息，比如1232341
+    console.error('Error parsing JSON:', error);
+    console.log('data:', data);
+    console.log('decryptedData:', decryptedData);
+    throw error;
+  }
   console.log('parsedData:', parsedData);
 
   // 映射 API 响应到 JmComicInfo 结构

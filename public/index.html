@@ -79,7 +79,7 @@
             <x-if :value="comicInfo.tags && Array.isArray(comicInfo.tags) && comicInfo.tags.length">
               <div slot="text">标签：{{comicInfo.tags.join(',')}}</div>
             </x-if>
-            <s-button slot="action" type="filled-tonal" on:click="copyTitle()">
+            <s-button slot="action" on:click="copyTitle()">
               <s-icon slot="start">
                 <svg viewBox="0 -960 960 960">
                   <path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"></path>
@@ -87,7 +87,6 @@
               </s-icon>
               复制标题
             </s-button>
-            <s-button slot="action" on:click="searchOtherSites()">搜索其他站点</s-button>
           </s-card>
         </x-else-if>
         <x-else>
@@ -101,9 +100,6 @@
         </x-else>
       </div>
       <div class="center" style="margin: 16px">
-        <x-if :value="loadingSearchResult">
-          <s-circular-progress indeterminate="true"></s-circular-progress>
-        </x-if>
         <x-if :value="searchResult.length">
           <s-table style="overflow: auto; display: block">
             <s-tbody>
@@ -125,12 +121,6 @@
         </x-if>
         <x-else-if :value="comicInfo.name">
           <s-empty>暂时没有数据</s-empty>
-          <s-alert id="alert" type="error" class:hide="!searchResultAlert">
-            {{ searchResultAlert }}
-            <s-icon-button slot="end" on:click="searchResultAlert = ''">
-              <s-icon name="close"></s-icon>
-            </s-icon-button>
-          </s-alert>
         </x-else-if>
       </div>
       <s-snackbar id="copySuccess" type="success">
@@ -143,9 +133,7 @@
             comicInfo: {},
             searchResult: [],
             loadingComicInfo: false,
-            loadingSearchResult: false,
             comicInfoAlert: '',
-            searchResultAlert: '',
           },
           ready() {
             // 回车键搜索
@@ -175,7 +163,8 @@
                 if (jmComicInfo.error) {
                   throw new Error(jmComicInfo.error);
                 }
-                this.comicInfo = jmComicInfo || {};
+                this.comicInfo = jmComicInfo.comicInfo || {};
+                this.searchResult = jmComicInfo.searchResult || [];
               } catch (err) {
                 console.error(err);
                 this.comicInfoAlert = err.message || '获取漫画信息失败';
@@ -198,33 +187,8 @@
                 this.shadow.$('#copySuccess').ele.show();
               });
             },
-            async searchOtherSites() {
-              if (!this.comicInfo.name) {
-                return;
-              }
-              this.searchResultAlert = '';
-              const query = new URLSearchParams({
-                jmid: this.jmid,
-                title: this.comicInfo.name,
-              }).toString();
-              this.loadingSearchResult = true;
-              try {
-                const resp = await fetch(`/search?${query}`)
-                const result = await resp.json()
-                if (result.error) {
-                  throw new Error(result.error);
-                }
-                this.searchResult = result || [];
-              } catch (err) {
-                console.error(err);
-                this.searchResultAlert = err.message || '搜索失败';
-              } finally {
-                this.loadingSearchResult = false;
-              }
-            },
             clearAlerts() {
               this.comicInfoAlert = '';
-              this.searchResultAlert = '';
             },
           }
         }

@@ -5,28 +5,27 @@ const app = new Hono();
 
 app.get('/getInfo/:jmid', async (c) => {
   const { jmid } = c.req.param();
-  return c.json(await getJmComicInfo(jmid));
-});
-
-app.get('/search', async (c) => {
-  const { jmid, title } = c.req.query();
-  if (!title) {
-    throw new Error('请输入名称');
+  const comicInfo = await getJmComicInfo(jmid);
+  const title = comicInfo.name;
+  let searchResult = [];
+  if (title) {
+    let extractedTitle = extractTitle(title);
+    if (!extractedTitle) {
+      extractedTitle = title;
+    }
+    for (const site of sites) {
+      searchResult.push({
+        logo: site.logo,
+        site: site.name,
+        title: extractedTitle,
+        search: site.search(extractedTitle),
+      });
+    }
   }
-  const results = [];
-  let extractedTitle = extractTitle(title);
-  if (!extractedTitle) {
-    extractedTitle = title;
-  }
-  for (const site of sites) {
-    results.push({
-      logo: site.logo,
-      site: site.name,
-      title: extractedTitle,
-      search: site.search(extractedTitle),
-    });
-  }
-  return c.json(results);
+  return c.json({
+    comicInfo,
+    searchResult,
+  });
 });
 
 app.onError((err, c) => {
