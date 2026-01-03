@@ -5,6 +5,11 @@ export const sites = [
     search: (title: string) => `https://e-hentai.org/?f_search="${encodeURIComponent(title)}"`,
   },
   {
+    logo: 'https://exhentai.org/favicon.ico',
+    name: 'Exhentai',
+    search: (title: string) => `https://exhentai.org/?f_search="${encodeURIComponent(title)}"`,
+  },
+  {
     logo: 'https://nhentai.net/favicon.ico',
     name: 'nhentai',
     search: (title: string) => `https://nhentai.net/search/?q=${encodeURIComponent(title)}`,
@@ -13,6 +18,16 @@ export const sites = [
     logo: 'https://ltn.gold-usergeneratedcontent.net/favicon-192x192.png',
     name: 'Hitomi',
     search: (title: string) => `https://hitomi.la/search.html?${encodeURIComponent(title)}`,
+  },
+  {
+    logo: 'https://www.dlsite.com/images/web/common/favicon.ico',
+    name: 'DLsite',
+    search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${encodeURIComponent(title)}`,
+  },
+  {
+    logo: 'https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico',
+    name: 'Google',
+    search: (title: string) => `https://www.google.com/search?q=${encodeURIComponent(title)}`,
   },
 ];
 
