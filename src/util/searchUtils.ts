@@ -2,12 +2,12 @@ export const sites = [
   {
     logo: 'https://e-hentai.org/favicon.ico',
     name: 'E-Hentai',
-    search: (title: string) => `https://e-hentai.org/?f_search="${encodeURIComponent(title)}"`,
+    search: (title: string) => `https://e-hentai.org/?f_search=${encodeURIComponent(title)}`,
   },
   {
     logo: 'https://exhentai.org/favicon.ico',
     name: 'Exhentai',
-    search: (title: string) => `https://exhentai.org/?f_search="${encodeURIComponent(title)}"`,
+    search: (title: string) => `https://exhentai.org/?f_search=${encodeURIComponent(title)}`,
   },
   {
     logo: 'https://nhentai.net/favicon.ico',
@@ -22,7 +22,7 @@ export const sites = [
   {
     logo: 'https://www.dlsite.com/images/web/common/favicon.ico',
     name: 'DLsite',
-    search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${encodeURIComponent(title)}`,
+    search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${encodeURIComponent(title.replace(/\s+/g, '+'))}`,
   },
   {
     logo: 'https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico',
