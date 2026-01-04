@@ -22,7 +22,7 @@ export const sites = [
   {
     logo: 'https://www.dlsite.com/images/web/common/favicon.ico',
     name: 'DLsite',
-    search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${encodeURIComponent(title.replace(/\s+/g, '+'))}`,
+    search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${title.split(' ').map(encodeURIComponent).join('+')}`,
   },
   {
     logo: 'https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico',
