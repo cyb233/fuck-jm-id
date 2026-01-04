@@ -50,7 +50,7 @@
       <div class="center">
         <s-search id="search" placeholder="JMID" aria-label="JMID" on:input="jmid = $event.target.value">
           <s-icon name="search" slot="start"></s-icon>
-          <s-icon-button slot="end" on:click="clearSearch($event)">
+          <s-icon-button slot="end" on:click="clearSearch()">
             <s-icon name="close"></s-icon>
           </s-icon-button>
         </s-search>
@@ -136,6 +136,17 @@
             loadingComicInfo: false,
             comicInfoAlert: '',
           },
+          watch: {
+            jmid(val) {
+              // 同步jmid到URL hash
+              if (val) {
+                window.location.hash = `#${val}`;
+              } else {
+                // 如果jmid为空，清除hash
+                history.replaceState(null, null, window.location.pathname + window.location.search);
+              }
+            },
+          },
           ready() {
             // 回车键搜索
             const search = this.shadow.$('#search');
@@ -146,6 +157,32 @@
                   this.comicInfo = {};
                   this.searchResult = [];
                   this.getJmComicInfo();
+                }
+              }
+            });
+
+            // 首次加载时从hash中读取jmid值
+            const hash = window.location.hash;
+            if (hash && hash.length > 1) {
+              this.jmid = hash.substring(1); // 去掉#符号
+              this.updateSearch();
+              this.getJmComicInfo();
+            }
+
+            // 监听hash变化
+            window.addEventListener('hashchange', () => {
+              const newHash = window.location.hash;
+              if (newHash && newHash.length > 1) {
+                const newJmid = newHash.substring(1);
+                if (this.jmid !== newJmid) {
+                  this.jmid = newJmid;
+                  this.updateSearch();
+                  this.getJmComicInfo();
+                }
+              } else {
+                if (this.jmid !== '') {
+                  this.jmid = '';
+                  this.updateSearch();
                 }
               }
             });
@@ -173,12 +210,14 @@
                 this.loadingComicInfo = false;
               }
             },
-            clearSearch(e) {
+            updateSearch() {
+              const search = this.shadow.$('#search');
+              search.ele.value = this.jmid;
+            },
+            clearSearch() {
               this.clearAlerts();
-              const search = $(e.target).root.$('#search');
-              search.ele.value = '';
               this.jmid = '';
-              search.ele.focus();
+              this.updateSearch();
             },
             copyTitle() {
               if (!this.comicInfo.name) {
