@@ -1,11 +1,16 @@
 import CryptoJS from 'crypto-js';
 
-const DOMAIN_API_LIST = ['www.cdnaspa.vip', 'www.cdnaspa.club', 'www.cdnplaystation6.vip', 'www.cdnplaystation6.cc'];
+const API_URL_DOMAIN_SERVER_LIST = [
+  'https://rup4a04-c01.tos-ap-southeast-1.bytepluses.com/newsvr-2025.txt',
+  'https://rup4a04-c02.tos-cn-hongkong.bytepluses.com/newsvr-2025.txt',
+];
+const DOMAIN_API_LIST = ['www.cdnzack.cc', 'www.cdnsha.org', 'www.cdnbea.club', 'www.cdnbea.net', 'www.cdn-mspjmapiproxy.xyz'];
 
 const client_key = 'api';
 const APP_VERSION = '2.0.6';
 const APP_TOKEN_SECRET = '18comicAPP';
 const APP_DATA_SECRET = '185Hcomic3PAPP7R';
+const API_DOMAIN_SERVER_SECRET = 'diosfjckwpqpdfjkvnqQjsik';
 const API_SEARCH = '/search';
 const API_CATEGORIES_FILTER = '/categories/filter';
 const API_ALBUM = '/album';
@@ -36,18 +41,56 @@ export type JmComicInfo = {
   purchased: string;
 };
 
+async function getJMApiList(): Promise<string[]> {
+  for (const url of API_URL_DOMAIN_SERVER_LIST) {
+    try {
+      console.log('Fetching', url);
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept-Encoding': 'gzip, deflate',
+          'user-agent':
+            'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+        },
+      });
+      if (!resp.ok) {
+        console.error('HTTP error! status:', resp.status);
+        continue;
+      }
+      let text = await resp.text();
+      // todo 解密
+      text = text.replace(/^[^A-Za-z]+/, '');
+      const decrypted = decodeRespData(text, '', API_DOMAIN_SERVER_SECRET);
+      console.log('decrypted:', decrypted);
+      // 解析JSON
+      const data = JSON.parse(decrypted);
+      if (!data || !data.Server) {
+        console.error('Invalid JSON:', data);
+        continue;
+      }
+      // 返回JSON
+      return data.Server;
+    } catch (error) {
+      console.error(error);
+      continue;
+    }
+  }
+  return DOMAIN_API_LIST;
+}
+
 export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   const id = formatId(jmid);
   if (!id) {
     throw new Error('无效的jmid');
   }
   // 随机选择一个域名
-  const domain = DOMAIN_API_LIST[Math.floor(Math.random() * DOMAIN_API_LIST.length)];
+  const apiList = await getJMApiList();
+  const domain = apiList[Math.floor(Math.random() * apiList.length)];
   const baseUrl = `https://${domain}`;
   const params = new URLSearchParams({
     id: id,
   }).toString();
-  const url = `${baseUrl}/${API_ALBUM}?${params}`;
+  const url = `${baseUrl}${API_ALBUM}?${params}`;
   console.log(`Fetching ${url}`);
 
   // 获取10位时间戳
@@ -121,7 +164,7 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   };
 }
 
-function decodeRespData(data: string, ts: number, secret?: string): string {
+function decodeRespData(data: string, ts: number | string, secret?: string): string {
   if (!secret) secret = APP_DATA_SECRET;
   const key = CryptoJS.MD5(`${ts}${secret}`).toString();
   const decrypted = CryptoJS.AES.decrypt(data, CryptoJS.enc.Utf8.parse(key), {
