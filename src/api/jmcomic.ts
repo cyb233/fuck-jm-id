@@ -83,85 +83,107 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   if (!id) {
     throw new Error('无效的jmid');
   }
-  // 随机选择一个域名
+
+  // 获取API列表
   const apiList = await getJMApiList();
-  const domain = apiList[Math.floor(Math.random() * apiList.length)];
-  const baseUrl = `https://${domain}`;
-  const params = new URLSearchParams({
-    id: id,
-  }).toString();
-  const url = `${baseUrl}${API_ALBUM}?${params}`;
-  console.log(`Fetching ${url}`);
+  const errors: Array<{ domain: string; error: unknown }> = [];
 
-  // 获取10位时间戳
-  const timestamp = Math.floor(Date.now() / 1000);
-  const tokenparam = `${timestamp},${APP_VERSION}`;
-  const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
+  // 循环尝试每个域名直到成功或全部失败
+  while (apiList.length > 0) {
+    // 随机选择一个域名
+    const randomIndex = Math.floor(Math.random() * apiList.length);
+    const domain = apiList[randomIndex];
 
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept-Encoding': 'gzip, deflate',
-        'user-agent':
-          'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-        token: token,
-        tokenparam: tokenparam,
-      },
-    });
-    if (!resp.ok) {
-      console.error('HTTP error! status:', resp.status);
-      throw new Error(`HTTP error! status: ${resp.status}`);
+    // 从列表中移除该域名
+    apiList.splice(randomIndex, 1);
+
+    try {
+      const baseUrl = `https://${domain}`;
+      const params = new URLSearchParams({
+        id: id,
+      }).toString();
+      const url = `${baseUrl}${API_ALBUM}?${params}`;
+      console.log(`Fetching ${url}`);
+
+      // 获取10位时间戳
+      const timestamp = Math.floor(Date.now() / 1000);
+      const tokenparam = `${timestamp},${APP_VERSION}`;
+      const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
+
+      let resp;
+      try {
+        resp = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept-Encoding': 'gzip, deflate',
+            'user-agent':
+              'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+            token: token,
+            tokenparam: tokenparam,
+          },
+        });
+        if (!resp.ok) {
+          const errorMsg = `HTTP error! status: ${resp.status}`;
+          console.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+      } catch (error) {
+        if (resp) {
+          console.error(await resp.text());
+        }
+        throw error;
+      }
+
+      const json: { code: number; data: string } = await resp.json();
+      console.log('json:', json);
+      const data = json.data;
+
+      // 解密数据
+      const decryptedData = decodeRespData(data, timestamp);
+      let parsedData;
+      try {
+        parsedData = JSON.parse(decryptedData);
+      } catch (error) {
+        console.error('Error parsing JSON:', error);
+        console.log('data:', data);
+        console.log('decryptedData:', decryptedData);
+        throw error;
+      }
+      console.log('parsedData:', parsedData);
+
+      // 成功获取数据，返回结果
+      return {
+        id: parsedData.id || 0,
+        name: parsedData.name || null,
+        images: parsedData.images || [],
+        addtime: parsedData.addtime || null,
+        description: parsedData.description || '',
+        total_views: parsedData.total_views || null,
+        likes: parsedData.likes || null,
+        series: parsedData.series || [],
+        series_id: parsedData.series_id || null,
+        comment_total: parsedData.comment_total || false,
+        author: parsedData.author || [],
+        tags: parsedData.tags || [],
+        works: parsedData.works || [],
+        actors: parsedData.actors || [],
+        related_list: parsedData.related_list || [],
+        liked: parsedData.liked || false,
+        is_favorite: parsedData.is_favorite || false,
+        is_aids: parsedData.is_aids || false,
+        price: parsedData.price || '',
+        purchased: parsedData.purchased || '',
+      };
+    } catch (error) {
+      // 记录错误并尝试下一个域名
+      console.error(`Failed with domain ${domain}:`, error);
+      errors.push({ domain, error });
     }
-  } catch (error) {
-    if (resp) {
-      console.error(await resp.text());
-    }
-    console.error('Error fetching data:', error);
-    throw error;
   }
-  const json: { code: number; data: string } = await resp.json();
-  console.log('json:', json);
-  const data = json.data;
 
-  // 解密数据
-  const decryptedData = decodeRespData(data, timestamp);
-  let parsedData;
-  try {
-    parsedData = JSON.parse(decryptedData);
-  } catch (error) {
-    // 解析 JSON 失败，输出调试信息，比如1232341
-    console.error('Error parsing JSON:', error);
-    console.log('data:', data);
-    console.log('decryptedData:', decryptedData);
-    throw error;
-  }
-  console.log('parsedData:', parsedData);
-
-  // 映射 API 响应到 JmComicInfo 结构
-  return {
-    id: parsedData.id || 0,
-    name: parsedData.name || null,
-    images: parsedData.images || [],
-    addtime: parsedData.addtime || null,
-    description: parsedData.description || '',
-    total_views: parsedData.total_views || null,
-    likes: parsedData.likes || null,
-    series: parsedData.series || [],
-    series_id: parsedData.series_id || null,
-    comment_total: parsedData.comment_total || false,
-    author: parsedData.author || [],
-    tags: parsedData.tags || [],
-    works: parsedData.works || [],
-    actors: parsedData.actors || [],
-    related_list: parsedData.related_list || [],
-    liked: parsedData.liked || false,
-    is_favorite: parsedData.is_favorite || false,
-    is_aids: parsedData.is_aids || false,
-    price: parsedData.price || '',
-    purchased: parsedData.purchased || '',
-  };
+  // 所有域名都已失败
+  const errorSummary = errors.map((e) => `${e.domain}: ${e.error}`).join('; ');
+  throw new Error(`All domains failed. Errors: ${errorSummary}`);
 }
 
 function decodeRespData(data: string, ts: number | string, secret?: string): string {
