@@ -1,5 +1,10 @@
 export const sites = [
   {
+    logo: 'https://18comic.vip/favicon.ico',
+    name: 'JmComic',
+    search: (title: string) => `https://18comic.vip/search/photos?main_tag=0&search_query=${encodeURIComponent(title)}`,
+  },
+  {
     logo: 'https://e-hentai.org/favicon.ico',
     name: 'E-Hentai',
     search: (title: string) => `https://e-hentai.org/?f_search=${encodeURIComponent(title)}`,
@@ -38,7 +43,7 @@ const PATTERN_TITLE_PREFIX = new RegExp('^(?:(?:\\([^\\)]*\\))|(?:\\[[^\\]]*\\])
 // Remove [XXX], (XXX), {XXX}, ~XXX~ stuff and something like ch. 1-23 at suffix
 const PATTERN_TITLE_SUFFIX = new RegExp(
   '(?:\\s+ch.[\\s\\d-]+)?(?:(?:\\([^\\)]*\\))|(?:\\[[^\\]]*\\])|(?:\\{[^\\}]*\\})|(?:~[^~]*~)|\\s+)*$',
-  'i' // CASE_INSENSITIVE
+  'i', // CASE_INSENSITIVE
 );
 
 export function extractTitle(title?: string | null): string | null {
