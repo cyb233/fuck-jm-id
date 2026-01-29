@@ -17,6 +17,7 @@ const API_ALBUM = '/album';
 const API_CHAPTER = '/chapter';
 const API_SCRAMBLE = '/chapter_view_template';
 const API_FAVORITE = '/favorite';
+const DEFAULT_CONCURRENCY = 3;
 
 export type JmComicInfo = {
   id: number;
@@ -84,100 +85,156 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
     throw new Error('无效的jmid');
   }
 
-  // 获取API列表
+  // 获取API列表并打乱顺序以保证随机性
   const apiList = await getJMApiList();
+  if (!apiList || apiList.length === 0) {
+    throw new Error('No API domains available');
+  }
+
+  const domains = shuffleArray(apiList);
+  const concurrency = DEFAULT_CONCURRENCY;
+
   const errors: Array<{ domain: string; error: unknown }> = [];
+  const globalControllers: AbortController[] = [];
 
-  // 循环尝试每个域名直到成功或全部失败
-  while (apiList.length > 0) {
-    // 随机选择一个域名
-    const randomIndex = Math.floor(Math.random() * apiList.length);
-    const domain = apiList[randomIndex];
+  // 按批次并发执行，每批 size 为 concurrency
+  while (domains.length > 0) {
+    const batch = domains.splice(0, concurrency);
+    const controllers: AbortController[] = [];
 
-    // 从列表中移除该域名
-    apiList.splice(randomIndex, 1);
+    const promises = batch.map((domain) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+      globalControllers.push(controller);
+
+      return (async () => {
+        const baseUrl = `https://${domain}`;
+        const params = new URLSearchParams({ id: id }).toString();
+        const url = `${baseUrl}${API_ALBUM}?${params}`;
+        console.log(`Fetching ${url}`);
+
+        // 每个请求使用独立的时间戳
+        const timestamp = Math.floor(Date.now() / 1000);
+        const tokenparam = `${timestamp},${APP_VERSION}`;
+        const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
+
+        let resp;
+        try {
+          resp = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept-Encoding': 'gzip, deflate',
+              'user-agent':
+                'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+              token: token,
+              tokenparam: tokenparam,
+            },
+            signal: controller.signal,
+          });
+
+          if (!resp.ok) {
+            const errorMsg = `HTTP error! status: ${resp.status}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
+          }
+        } catch (error) {
+          // 如果是被中止的请求，抛出明确错误以便后续忽略
+          if ((error as any)?.name === 'AbortError') {
+            throw new Error(`Request aborted for domain ${domain}`);
+          }
+          // 输出可能的响应体帮助调试
+          if (resp) {
+            try {
+              const text = await resp.text();
+              console.error(text);
+            } catch (e) {
+              // ignore
+            }
+          }
+          throw new Error(`Fetch failed for domain ${domain}: ${error}`);
+        }
+
+        const json: { code: number; data: string } = await resp.json();
+        console.log(domain, 'json:', json);
+        const data = json.data;
+
+        // 解密数据
+        const decryptedData = decodeRespData(data, timestamp);
+        let parsedData;
+        try {
+          parsedData = JSON.parse(decryptedData);
+        } catch (error) {
+          console.error('Error parsing JSON:', error);
+          console.log('data:', data);
+          console.log('decryptedData:', decryptedData);
+          throw new Error(`Failed to parse decrypted data from domain ${domain}: ${error}`);
+        }
+        console.log('parsedData:', parsedData);
+
+        return {
+          id: parsedData.id || 0,
+          name: parsedData.name || null,
+          images: parsedData.images || [],
+          addtime: parsedData.addtime || null,
+          description: parsedData.description || '',
+          total_views: parsedData.total_views || null,
+          likes: parsedData.likes || null,
+          series: parsedData.series || [],
+          series_id: parsedData.series_id || null,
+          comment_total: parsedData.comment_total || false,
+          author: parsedData.author || [],
+          tags: parsedData.tags || [],
+          works: parsedData.works || [],
+          actors: parsedData.actors || [],
+          related_list: parsedData.related_list || [],
+          liked: parsedData.liked || false,
+          is_favorite: parsedData.is_favorite || false,
+          is_aids: parsedData.is_aids || false,
+          price: parsedData.price || '',
+          purchased: parsedData.purchased || '',
+        } as JmComicInfo;
+      })();
+    });
 
     try {
-      const baseUrl = `https://${domain}`;
-      const params = new URLSearchParams({
-        id: id,
-      }).toString();
-      const url = `${baseUrl}${API_ALBUM}?${params}`;
-      console.log(`Fetching ${url}`);
-
-      // 获取10位时间戳
-      const timestamp = Math.floor(Date.now() / 1000);
-      const tokenparam = `${timestamp},${APP_VERSION}`;
-      const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
-
-      let resp;
-      try {
-        resp = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Accept-Encoding': 'gzip, deflate',
-            'user-agent':
-              'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-            token: token,
-            tokenparam: tokenparam,
-          },
-        });
-        if (!resp.ok) {
-          const errorMsg = `HTTP error! status: ${resp.status}`;
-          console.error(errorMsg);
-          throw new Error(errorMsg);
+      const result = await Promise.any(promises);
+      // 取消本批次以及全局的其它请求
+      controllers.forEach((c) => {
+        try {
+          c.abort();
+        } catch (e) {
+          // ignore
         }
-      } catch (error) {
-        if (resp) {
-          console.error(await resp.text());
+      });
+      globalControllers.forEach((c) => {
+        try {
+          c.abort();
+        } catch (e) {
+          // ignore
         }
-        throw error;
+      });
+      return result;
+    } catch (err) {
+      // Promise.any 的 AggregateError 中包含每个 promise 的错误
+      const agg = err as AggregateError;
+      if (agg && Array.isArray((agg as any).errors)) {
+        const errs = (agg as any).errors;
+        for (let i = 0; i < errs.length; i++) {
+          errors.push({ domain: batch[i], error: errs[i] });
+        }
+      } else {
+        errors.push({ domain: batch.join(', '), error: err });
       }
-
-      const json: { code: number; data: string } = await resp.json();
-      console.log('json:', json);
-      const data = json.data;
-
-      // 解密数据
-      const decryptedData = decodeRespData(data, timestamp);
-      let parsedData;
-      try {
-        parsedData = JSON.parse(decryptedData);
-      } catch (error) {
-        console.error('Error parsing JSON:', error);
-        console.log('data:', data);
-        console.log('decryptedData:', decryptedData);
-        throw error;
-      }
-      console.log('parsedData:', parsedData);
-
-      // 成功获取数据，返回结果
-      return {
-        id: parsedData.id || 0,
-        name: parsedData.name || null,
-        images: parsedData.images || [],
-        addtime: parsedData.addtime || null,
-        description: parsedData.description || '',
-        total_views: parsedData.total_views || null,
-        likes: parsedData.likes || null,
-        series: parsedData.series || [],
-        series_id: parsedData.series_id || null,
-        comment_total: parsedData.comment_total || false,
-        author: parsedData.author || [],
-        tags: parsedData.tags || [],
-        works: parsedData.works || [],
-        actors: parsedData.actors || [],
-        related_list: parsedData.related_list || [],
-        liked: parsedData.liked || false,
-        is_favorite: parsedData.is_favorite || false,
-        is_aids: parsedData.is_aids || false,
-        price: parsedData.price || '',
-        purchased: parsedData.purchased || '',
-      };
-    } catch (error) {
-      // 记录错误并尝试下一个域名
-      console.error(`Failed with domain ${domain}:`, error);
-      errors.push({ domain, error });
+      // 本批次全部失败，继续下一批次
+    } finally {
+      // 确保本批次的请求被取消，释放资源
+      controllers.forEach((c) => {
+        try {
+          c.abort();
+        } catch (e) {
+          // ignore
+        }
+      });
     }
   }
 
@@ -194,6 +251,18 @@ function decodeRespData(data: string, ts: number | string, secret?: string): str
     padding: CryptoJS.pad.Pkcs7,
   });
   return decrypted.toString(CryptoJS.enc.Utf8);
+}
+
+// Fisher-Yates shuffle
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
 }
 
 function formatId(jmid: string): string {
