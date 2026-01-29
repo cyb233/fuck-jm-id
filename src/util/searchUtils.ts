@@ -30,6 +30,11 @@ export const sites = [
     search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${title.split(' ').map(encodeURIComponent).join('+')}`,
   },
   {
+    logo: 'https://www.pixiv.net/favicon.ico',
+    name: 'Pixiv',
+    search: (title: string) => `https://www.pixiv.net/tags/${encodeURIComponent(title)}/artworks?p=1&s_mode=s_tag`,
+  },
+  {
     logo: 'https://www.gstatic.com/images/branding/searchlogo/ico/favicon.ico',
     name: 'Google',
     search: (title: string) => `https://www.google.com/search?q=${encodeURIComponent(title)}`,
