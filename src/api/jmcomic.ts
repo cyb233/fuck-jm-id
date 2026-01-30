@@ -90,12 +90,12 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   if (!apiList || apiList.length === 0) {
     throw new Error('No API domains available');
   }
+  console.log('API domains:', apiList);
 
   const domains = shuffleArray(apiList);
   const concurrency = DEFAULT_CONCURRENCY;
 
   const errors: Array<{ domain: string; error: unknown }> = [];
-  const globalControllers: AbortController[] = [];
 
   // 按批次并发执行，每批 size 为 concurrency
   while (domains.length > 0) {
@@ -105,7 +105,6 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
     const promises = batch.map((domain) => {
       const controller = new AbortController();
       controllers.push(controller);
-      globalControllers.push(controller);
 
       return (async () => {
         const baseUrl = `https://${domain}`;
@@ -198,15 +197,8 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
 
     try {
       const result = await Promise.any(promises);
-      // 取消本批次以及全局的其它请求
+      // 取消本批次的请求
       controllers.forEach((c) => {
-        try {
-          c.abort();
-        } catch (e) {
-          // ignore
-        }
-      });
-      globalControllers.forEach((c) => {
         try {
           c.abort();
         } catch (e) {
