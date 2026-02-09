@@ -19,6 +19,7 @@
       margin: 0;
       padding: 0;
       width: 100%;
+      min-width: 400px;
     }
 
     o-app {
@@ -59,8 +60,8 @@
       </style>
       <l-m src="./component/github-corner.html"></l-m>
       <github-corner href="https://github.com/cyb233/fuck-jm-id"></github-corner>
-      <h1 class="center">Fuck JMComic ID</h1>
-      <div class="center">
+      <h1 class="center" style="margin: 16px">Fuck JMComic ID</h1>
+      <div class="center" style="margin: 16px">
         <s-search id="search" placeholder="JMID" aria-label="JMID" on:input="jmid = $event.target.value">
           <s-icon name="search" slot="start"></s-icon>
           <s-icon-button slot="end" on:click="clearSearch()">
@@ -118,7 +119,7 @@
             <s-fold folded="true" style="padding: 24px;">
               <s-button slot="trigger">相关推荐</s-button>
               <x-fill :value="comicInfo.related_list">
-                <s-card style="display: inline-block; max-width: fit-content; padding: 16px; margin: 8px; width: 300px; height: 500px;">
+                <s-card style="display: inline-block; padding: 16px; margin: 8px; max-width: 300px; height: 500px;">
                   <div slot="image">
                     <x-if :value="$data.id">
                       <img attr:src="$host.imgUrl($data.id)" style="height: 160px;" on:error="$host.imgErrorTimes[$data.id]++" />
@@ -186,9 +187,15 @@
             loadingComicInfo: false,
             comicInfoAlert: '',
             imgErrorTimes: {},
+            imeStatus: false,
           },
           watch: {
             jmid(val) {
+              if (this.imeStatus) {
+                return;
+              }
+              this.jmid = this.formatJMID(this.jmid);
+              this.updateSearch();
               // 同步jmid到URL hash
               if (val) {
                 window.location.hash = `#${val}`;
@@ -238,11 +245,28 @@
                 }
               }
             });
+
+            // 监听输入法状态变化
+            window.addEventListener('compositionstart', () => {
+              this.imeStatus = true;
+            });
+            window.addEventListener('compositionend', () => {
+              this.imeStatus = false;
+              this.jmid = this.formatJMID(this.jmid);
+              this.updateSearch();
+            });
           },
           proto: {
+            formatJMID(jmid) {
+              // 去除字符，如果存在文本"JM"，提取到后面的数字部分，否则去除所有非数字字符
+              if (/JM?\s*\d*/i.test(jmid)) {
+                return jmid.replace(/(JM?)\s*(\d*)/i, '$1$2');
+              }
+              return jmid.replace(/\D/g, '');
+            },
             async getJmComicInfo(jmid = this.jmid) {
               this.clearAlerts();
-              if (!jmid) {
+              if (!/(JM)?\d+/i.test(jmid)) {
                 return;
               }
               this.jmid = jmid;
