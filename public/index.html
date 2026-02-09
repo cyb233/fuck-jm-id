@@ -87,9 +87,6 @@
               </x-if>
             </div>
             <div slot="text">ID：{{comicInfo.id}}</div>
-            <x-if :value="comicInfo.redirect === 301">
-              <div slot="text">需要登录才能查看</div>
-            </x-if>
             <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
               <div slot="text">作品：{{comicInfo?.works?.join(',')}}</div>
             </x-if>
@@ -117,6 +114,31 @@
               复制完整标题
             </s-button>
           </s-card>
+          <x-if :value="comicInfo.related_list && Array.isArray(comicInfo.related_list) && comicInfo.related_list.length">
+            <s-fold folded="true" style="padding: 24px;">
+              <s-button slot="trigger">相关推荐</s-button>
+              <x-fill :value="comicInfo.related_list">
+                <s-card style="display: inline-block; max-width: fit-content; padding: 16px; margin: 8px; width: 300px; height: 500px;">
+                  <div slot="image">
+                    <x-if :value="$data.id">
+                      <img attr:src="$host.imgUrl($data.id)" style="height: 160px;" on:error="$host.imgErrorTimes[$data.id]++" />
+                    </x-if>
+                  </div>
+                  <div slot="headline"><a attr:href="'https://18comic.vip/album/' + $data.id" target="_blank">{{ $data.name }}</a></div>
+                  <div slot="subhead">
+                    作者：
+                    <x-if :value="$data.author">
+                      {{ $data?.author }}
+                    </x-if>
+                  </div>
+                  <s-button slot="action" on:click="$host.getJmComicInfo($data.id)">
+                    ID：{{ $data.id }}
+                    <s-icon name="search" slot="end"></s-icon>
+                  </s-button>
+                </s-card>
+              </x-fill>
+            </s-fold>
+          </x-if>
         </x-else-if>
         <x-else>
           <s-empty>暂时没有数据</s-empty>
@@ -163,7 +185,7 @@
             searchResult: [],
             loadingComicInfo: false,
             comicInfoAlert: '',
-            imgErrorTimes: 0,
+            imgErrorTimes: {},
           },
           watch: {
             jmid(val) {
@@ -185,7 +207,7 @@
                   e.preventDefault();
                   this.comicInfo = {};
                   this.searchResult = [];
-                  this.imgErrorTimes = 0;
+                  this.imgErrorTimes = {};
                   this.getJmComicInfo();
                 }
               }
@@ -218,13 +240,15 @@
             });
           },
           proto: {
-            async getJmComicInfo() {
+            async getJmComicInfo(jmid = this.jmid) {
               this.clearAlerts();
-              const jmid = this.jmid;
               if (!jmid) {
                 return;
               }
+              this.jmid = jmid;
+              this.updateSearch();
               this.loadingComicInfo = true;
+              this.imgErrorTimes = {};
               try {
                 const jmComicInfoResp = await fetch(`/getInfo/${encodeURIComponent(jmid)}`)
                 const jmComicInfo = await jmComicInfoResp.json()
@@ -264,10 +288,13 @@
               if (!id) {
                 return '';
               }
-              if (this.imgErrorTimes > 2) {
+              if (!this.imgErrorTimes[id]) {
+                this.imgErrorTimes[id] = 0;
+              }
+              if (this.imgErrorTimes[id] > 2) {
                 return '';
               }
-              return `https://cdn-msp${['', '2', '3'][this.imgErrorTimes]}.18comic.vip/media/albums/${id}.jpg`
+              return `https://cdn-msp${['', '2', '3'][this.imgErrorTimes[id] || 0]}.18comic.vip/media/albums/${id}.jpg`
             }
           }
         }
