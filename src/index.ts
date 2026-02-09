@@ -9,6 +9,17 @@ app.get('/getInfo/:jmid', async (c) => {
   const title = comicInfo.name;
   let searchResult = [];
   if (title) {
+    try {
+      const albumUrl = `https://18comic.vip/album/${jmid}`;
+      const resp = await fetch(albumUrl, { method: 'HEAD', redirect: 'manual' });
+      if (resp.status === 301) {
+        comicInfo.redirect = true;
+      }
+    } catch (err) {
+      // ignore redirect check errors
+    }
+
+    // 解析标题
     let extractedTitle = extractTitle(title);
     if (!extractedTitle) {
       extractedTitle = title;

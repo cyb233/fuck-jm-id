@@ -87,6 +87,9 @@
               </x-if>
             </div>
             <div slot="text">ID：{{comicInfo.id}}</div>
+            <x-if :value="comicInfo.redirect">
+              <div slot="text">需要登录才能查看</div>
+            </x-if>
             <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
               <div slot="text">作品：{{comicInfo?.works?.join(',')}}</div>
             </x-if>
