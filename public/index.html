@@ -56,6 +56,27 @@
         .hide {
           display: none;
         }
+
+        .related-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          align-items: stretch;
+          justify-items: stretch;
+        }
+
+        .related-card {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          padding: 16px;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+
+        .related-card img {
+          height: 160px;
+        }
       </style>
       <l-m src="./component/github-corner.html"></l-m>
       <github-corner href="https://github.com/cyb233/fuck-jm-id"></github-corner>
@@ -83,24 +104,63 @@
             <div slot="subhead">
               作者：
               <x-if :value="comicInfo.author && Array.isArray(comicInfo.author)">
-                {{comicInfo?.author?.join(',')}}
+                <x-fill :value="comicInfo.author">
+                  <s-chip clickable="false">
+                    {{ $data }}
+                  </s-chip>
+                </x-fill>
               </x-if>
             </div>
             <div slot="text">ID：{{comicInfo.id}}</div>
             <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
-              <div slot="text">作品：{{comicInfo?.works?.join(',')}}</div>
+              <div slot="text">作品：
+                <x-fill :value="comicInfo.works">
+                  <s-chip clickable="false">
+                    {{ $data }}
+                  </s-chip>
+                </x-fill>
+              </div>
+            </x-if>
+            <x-if :value="comicInfo.series && Array.isArray(comicInfo.series) && comicInfo.series.length">
+              <div slot="text">系列：
+                <x-fill :value="comicInfo.series">
+                  <s-chip clickable="false">
+                    {{ $data }}
+                  </s-chip>
+                </x-fill>
+              </div>
+            </x-if>
+            <x-if :value="comicInfo.actors && Array.isArray(comicInfo.actors) && comicInfo.actors.length">
+              <div slot="text">角色：
+                <x-fill :value="comicInfo.actors">
+                  <s-chip clickable="false">
+                    {{ $data }}
+                  </s-chip>
+                </x-fill>
+              </div>
             </x-if>
             <x-if :value="comicInfo.tags && Array.isArray(comicInfo.tags) && comicInfo.tags.length">
-              <div slot="text">标签：{{comicInfo?.tags?.join(',')}}</div>
+              <div slot="text">标签：
+                <x-fill :value="comicInfo.tags">
+                  <s-chip clickable="false">
+                    {{ $data }}
+                  </s-chip>
+                </x-fill>
+              </div>
             </x-if>
             <div slot="text">
-              总浏览量：{{comicInfo?.total_views || 0}}
-              |
-              喜欢数：{{comicInfo?.likes || 0}}
-              |
-              评论数：{{comicInfo?.comment_total || 0}}
-              |
-              上传时间：{{comicInfo?.addtime ? new Date(comicInfo.addtime * 1000).toLocaleString() : '-'}}
+              <s-chip clickable="false">
+                浏览量：{{comicInfo?.total_views || 0}}
+              </s-chip>
+              <s-chip clickable="false">
+                点赞数：{{comicInfo?.likes || 0}}
+              </s-chip>
+              <s-chip clickable="false">
+                评论数：{{comicInfo?.comment_total || 0}}
+              </s-chip>
+              <s-chip clickable="false">
+                上传时间：{{comicInfo?.addtime ? new Date(comicInfo.addtime * 1000).toLocaleString() : '-'}}
+              </s-chip>
             </div>
             <x-if :value="comicInfo.description">
               <div slot="text">简介：{{comicInfo?.description}}</div>
@@ -115,28 +175,30 @@
             </s-button>
           </s-card>
           <x-if :value="comicInfo.related_list && Array.isArray(comicInfo.related_list) && comicInfo.related_list.length">
-            <s-fold folded="true" style="padding: 24px;">
-              <s-button slot="trigger">相关推荐</s-button>
-              <x-fill :value="comicInfo.related_list">
-                <s-card style="display: inline-block; padding: 16px; margin: 8px; max-width: 300px; height: 500px;">
-                  <div slot="image">
-                    <x-if :value="$data.id">
-                      <img attr:src="$host.imgUrl($data.id)" style="height: 160px;" on:error="$host.imgErrorTimes[$data.id]++" />
-                    </x-if>
-                  </div>
-                  <div slot="headline"><a attr:href="'https://18comic.vip/album/' + $data.id" target="_blank">{{ $data.name }}</a></div>
-                  <div slot="subhead">
-                    作者：
-                    <x-if :value="$data.author">
-                      {{ $data?.author }}
-                    </x-if>
-                  </div>
-                  <s-button slot="action" on:click="$host.getJmComicInfo($data.id)">
-                    ID：{{ $data.id }}
-                    <s-icon name="search" slot="end"></s-icon>
-                  </s-button>
-                </s-card>
-              </x-fill>
+            <s-fold folded="true">
+              <s-button slot="trigger" style="margin: 16px;">相关推荐</s-button>
+              <div class="related-list" style="margin: 16px;">
+                <x-fill :value="comicInfo.related_list">
+                  <s-card class="related-card">
+                    <div slot="image">
+                      <x-if :value="$data.id">
+                        <img attr:src="$host.imgUrl($data.id)" on:error="$host.imgErrorTimes[$data.id]++" />
+                      </x-if>
+                    </div>
+                    <div slot="headline"><a attr:href="'https://18comic.vip/album/' + $data.id" target="_blank">{{ $data.name }}</a></div>
+                    <div slot="subhead">
+                      作者：
+                      <x-if :value="$data.author">
+                        {{ $data?.author }}
+                      </x-if>
+                    </div>
+                    <s-button slot="action" on:click="$host.getJmComicInfo($data.id)">
+                      ID：{{ $data.id }}
+                      <s-icon name="search" slot="end"></s-icon>
+                    </s-button>
+                  </s-card>
+                </x-fill>
+              </div>
             </s-fold>
           </x-if>
         </x-else-if>
