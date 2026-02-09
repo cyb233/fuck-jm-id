@@ -40,7 +40,7 @@ export type JmComicInfo = {
   is_aids: boolean;
   price: string;
   purchased: string;
-  redirect: boolean;
+  redirect: number;
 };
 
 async function getJMApiList(): Promise<string[]> {
@@ -192,7 +192,7 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
           is_aids: parsedData.is_aids || false,
           price: parsedData.price || '',
           purchased: parsedData.purchased || '',
-          redirect: false, // 默认不重定向，后续会单独检查
+          redirect: 200, // 默认不重定向，后续会单独检查
         };
       })();
     });

@@ -12,9 +12,7 @@ app.get('/getInfo/:jmid', async (c) => {
     try {
       const albumUrl = `https://18comic.vip/album/${jmid}`;
       const resp = await fetch(albumUrl, { method: 'HEAD', redirect: 'manual' });
-      if (resp.status === 301) {
-        comicInfo.redirect = true;
-      }
+      comicInfo.redirect = resp.status;
     } catch (err) {
       // ignore redirect check errors
     }
