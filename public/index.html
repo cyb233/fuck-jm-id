@@ -97,7 +97,7 @@
           <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
               <x-if :value="comicInfo.id">
-                <img attr:src="imgUrl(comicInfo.id)" style="height: 160px;" on:error="imgErrorTimes++" />
+                <img attr:src="coverImgUrl()" style="height: 160px;" on:error="imgErrorTimes++" />
               </x-if>
             </div>
             <div slot="headline"><a attr:href="'https://18comic.vip/album/' + comicInfo.id" target="_blank">{{comicInfo.name}}</a></div>
@@ -380,6 +380,12 @@
                 return '';
               }
               return `https://cdn-msp${['', '2', '3'][this.imgErrorTimes[id] || 0]}.18comic.vip/media/albums/${id}.jpg`
+            },
+            coverImgUrl() {
+              if (this.comicInfo?.cover_base64) {
+                return `data:image/jpeg;base64,${this.comicInfo.cover_base64}`;
+              }
+              return this.imgUrl(this.comicInfo?.id);
             }
           }
         }

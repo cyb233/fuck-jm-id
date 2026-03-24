@@ -6,6 +6,16 @@ const API_URL_DOMAIN_SERVER_LIST = [
 ];
 const DOMAIN_API_LIST = ['www.cdnzack.cc', 'www.cdnsha.org', 'www.cdnbea.club', 'www.cdnbea.net', 'www.cdn-mspjmapiproxy.xyz'];
 
+//   # 移动端图片域名
+const DOMAIN_IMAGE_LIST = [
+  'cdn-msp.jmapiproxy1.cc',
+  'cdn-msp.jmapiproxy2.cc',
+  'cdn-msp2.jmapiproxy2.cc',
+  'cdn-msp3.jmapiproxy2.cc',
+  'cdn-msp.jmapinodeudzn.net',
+  'cdn-msp3.jmapinodeudzn.net',
+];
+
 const client_key = 'api';
 const APP_VERSION = '2.0.6';
 const APP_TOKEN_SECRET = '18comicAPP';
@@ -18,6 +28,11 @@ const API_CHAPTER = '/chapter';
 const API_SCRAMBLE = '/chapter_view_template';
 const API_FAVORITE = '/favorite';
 const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_HEADERS = {
+  'Accept-Encoding': 'gzip, deflate',
+  'user-agent':
+    'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+};
 
 export type JmComicInfo = {
   id: number;
@@ -40,6 +55,15 @@ export type JmComicInfo = {
   is_aids: boolean;
   price: string;
   purchased: string;
+  // 额外添加封面图片base64字段
+  cover_base64?: string;
+};
+
+type ConcurrentRequestOptions<TItem, TResult> = {
+  items: TItem[];
+  concurrency?: number;
+  getItemLabel?: (item: TItem) => string;
+  run: (item: TItem, signal: AbortSignal) => Promise<TResult>;
 };
 
 async function getJMApiList(): Promise<string[]> {
@@ -49,9 +73,7 @@ async function getJMApiList(): Promise<string[]> {
       const resp = await fetch(url, {
         method: 'GET',
         headers: {
-          'Accept-Encoding': 'gzip, deflate',
-          'user-agent':
-            'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+          ...DEFAULT_HEADERS,
         },
       });
       if (!resp.ok) {
@@ -79,6 +101,36 @@ async function getJMApiList(): Promise<string[]> {
   return DOMAIN_API_LIST;
 }
 
+async function loadCoverBase64(jmid: string): Promise<string> {
+  try {
+    return await requestWithConcurrency({
+      items: shuffleArray(DOMAIN_IMAGE_LIST),
+      run: async (domain, signal) => {
+        const coverUrl = `https://${domain}/media/albums/${jmid}.jpg`;
+        console.log(`Fetching ${coverUrl}`);
+
+        const resp = await fetch(coverUrl, {
+          method: 'GET',
+          headers: {
+            ...DEFAULT_HEADERS,
+          },
+          signal,
+        });
+
+        if (!resp.ok) {
+          throw new Error(`HTTP error! status: ${resp.status}`);
+        }
+
+        const imageBuffer = await resp.arrayBuffer();
+        return arrayBufferToBase64(imageBuffer);
+      },
+    });
+  } catch (error) {
+    console.error(error);
+  }
+  return '';
+}
+
 export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   const id = formatId(jmid);
   if (!id) {
@@ -92,147 +144,95 @@ export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   }
   console.log('API domains:', apiList);
 
-  const domains = shuffleArray(apiList);
-  const concurrency = DEFAULT_CONCURRENCY;
+  const result = await requestWithConcurrency({
+    items: shuffleArray(apiList),
+    run: async (domain, signal): Promise<JmComicInfo> => {
+      const baseUrl = `https://${domain}`;
+      const params = new URLSearchParams({ id: id }).toString();
+      const url = `${baseUrl}${API_ALBUM}?${params}`;
+      console.log(`Fetching ${url}`);
 
-  const errors: Array<{ domain: string; error: unknown }> = [];
+      // 每个请求使用独立的时间戳
+      const timestamp = Math.floor(Date.now() / 1000);
+      const tokenparam = `${timestamp},${APP_VERSION}`;
+      const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
 
-  // 按批次并发执行，每批 size 为 concurrency
-  while (domains.length > 0) {
-    const batch = domains.splice(0, concurrency);
-    const controllers: AbortController[] = [];
+      let resp;
+      try {
+        resp = await fetch(url, {
+          method: 'GET',
+          headers: {
+            ...DEFAULT_HEADERS,
+            token: token,
+            tokenparam: tokenparam,
+          },
+          signal,
+        });
 
-    const promises = batch.map((domain) => {
-      const controller = new AbortController();
-      controllers.push(controller);
-
-      return (async () => {
-        const baseUrl = `https://${domain}`;
-        const params = new URLSearchParams({ id: id }).toString();
-        const url = `${baseUrl}${API_ALBUM}?${params}`;
-        console.log(`Fetching ${url}`);
-
-        // 每个请求使用独立的时间戳
-        const timestamp = Math.floor(Date.now() / 1000);
-        const tokenparam = `${timestamp},${APP_VERSION}`;
-        const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
-
-        let resp;
-        try {
-          resp = await fetch(url, {
-            method: 'GET',
-            headers: {
-              'Accept-Encoding': 'gzip, deflate',
-              'user-agent':
-                'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-              token: token,
-              tokenparam: tokenparam,
-            },
-            signal: controller.signal,
-          });
-
-          if (!resp.ok) {
-            const errorMsg = `HTTP error! status: ${resp.status}`;
-            console.error(errorMsg);
-            throw new Error(errorMsg);
+        if (!resp.ok) {
+          const errorMsg = `HTTP error! status: ${resp.status}`;
+          console.error(errorMsg);
+          throw new Error(errorMsg);
+        }
+      } catch (error) {
+        if ((error as any)?.name === 'AbortError') {
+          throw new Error(`Request aborted for domain ${domain}`);
+        }
+        if (resp) {
+          try {
+            const text = await resp.text();
+            console.error(text);
+          } catch (e) {
+            // ignore
           }
-        } catch (error) {
-          // 如果是被中止的请求，抛出明确错误以便后续忽略
-          if ((error as any)?.name === 'AbortError') {
-            throw new Error(`Request aborted for domain ${domain}`);
-          }
-          // 输出可能的响应体帮助调试
-          if (resp) {
-            try {
-              const text = await resp.text();
-              console.error(text);
-            } catch (e) {
-              // ignore
-            }
-          }
-          throw new Error(`Fetch failed for domain ${domain}: ${error}`);
         }
-
-        const json: { code: number; data: string } = await resp.json();
-        console.log(domain, 'json:', json);
-        const data = json.data;
-
-        // 解密数据
-        const decryptedData = decodeRespData(data, timestamp);
-        let parsedData;
-        try {
-          parsedData = JSON.parse(decryptedData);
-        } catch (error) {
-          console.error('Error parsing JSON:', error);
-          console.log('data:', data);
-          console.log('decryptedData:', decryptedData);
-          throw new Error(`Failed to parse decrypted data from domain ${domain}: ${error}`);
-        }
-        console.log('parsedData:', parsedData);
-
-        return {
-          id: parsedData.id || 0,
-          name: parsedData.name || null,
-          images: parsedData.images || [],
-          addtime: parsedData.addtime || null,
-          description: parsedData.description || '',
-          total_views: parsedData.total_views || null,
-          likes: parsedData.likes || null,
-          series: parsedData.series || [],
-          series_id: parsedData.series_id || null,
-          comment_total: parsedData.comment_total || false,
-          author: parsedData.author || [],
-          tags: parsedData.tags || [],
-          works: parsedData.works || [],
-          actors: parsedData.actors || [],
-          related_list: parsedData.related_list || [],
-          liked: parsedData.liked || false,
-          is_favorite: parsedData.is_favorite || false,
-          is_aids: parsedData.is_aids || false,
-          price: parsedData.price || '',
-          purchased: parsedData.purchased || '',
-        };
-      })();
-    });
-
-    try {
-      const result = await Promise.any(promises);
-      // 取消本批次的请求
-      controllers.forEach((c) => {
-        try {
-          c.abort();
-        } catch (e) {
-          // ignore
-        }
-      });
-      return result;
-    } catch (err) {
-      // Promise.any 的 AggregateError 中包含每个 promise 的错误
-      const agg = err as AggregateError;
-      if (agg && Array.isArray((agg as any).errors)) {
-        const errs = (agg as any).errors;
-        for (let i = 0; i < errs.length; i++) {
-          errors.push({ domain: batch[i], error: errs[i] });
-        }
-      } else {
-        errors.push({ domain: batch.join(', '), error: err });
+        throw new Error(`Fetch failed for domain ${domain}: ${error}`);
       }
-      // 本批次全部失败，继续下一批次
-    } finally {
-      // 确保本批次的请求被取消，释放资源
-      controllers.forEach((c) => {
-        try {
-          c.abort();
-        } catch (e) {
-          // ignore
-        }
-      });
-    }
-  }
 
-  // 所有域名都已失败
-  const errorSummary = errors.map((e) => `${e.domain}: ${e.error}`).join('; ');
-  throw new Error(`All domains failed. Errors: ${errorSummary}`);
+      const json: { code: number; data: string } = await resp.json();
+      console.log(domain, 'json:', json);
+      const data = json.data;
+
+      const decryptedData = decodeRespData(data, timestamp);
+      let parsedData;
+      try {
+        parsedData = JSON.parse(decryptedData);
+      } catch (error) {
+        console.error('Error parsing JSON:', error);
+        console.log('data:', data);
+        console.log('decryptedData:', decryptedData);
+        throw new Error(`Failed to parse decrypted data from domain ${domain}: ${error}`);
+      }
+      console.log('parsedData:', parsedData);
+
+      return {
+        id: parsedData.id || 0,
+        name: parsedData.name || null,
+        images: parsedData.images || [],
+        addtime: parsedData.addtime || null,
+        description: parsedData.description || '',
+        total_views: parsedData.total_views || null,
+        likes: parsedData.likes || null,
+        series: parsedData.series || [],
+        series_id: parsedData.series_id || null,
+        comment_total: parsedData.comment_total || false,
+        author: parsedData.author || [],
+        tags: parsedData.tags || [],
+        works: parsedData.works || [],
+        actors: parsedData.actors || [],
+        related_list: parsedData.related_list || [],
+        liked: parsedData.liked || false,
+        is_favorite: parsedData.is_favorite || false,
+        is_aids: parsedData.is_aids || false,
+        price: parsedData.price || '',
+        purchased: parsedData.purchased || '',
+      };
+    },
+  });
+
+  const coverBase64 = await loadCoverBase64(id);
+  result.cover_base64 = coverBase64;
+  return result;
 }
 
 function decodeRespData(data: string, ts: number | string, secret?: string): string {
@@ -243,6 +243,72 @@ function decodeRespData(data: string, ts: number | string, secret?: string): str
     padding: CryptoJS.pad.Pkcs7,
   });
   return decrypted.toString(CryptoJS.enc.Utf8);
+}
+
+async function requestWithConcurrency<TItem, TResult>({
+  items,
+  concurrency = DEFAULT_CONCURRENCY,
+  getItemLabel = (item) => String(item),
+  run,
+}: ConcurrentRequestOptions<TItem, TResult>): Promise<TResult> {
+  const pendingItems = items.slice();
+  const errors: Array<{ item: string; error: unknown }> = [];
+
+  while (pendingItems.length > 0) {
+    const batch = pendingItems.splice(0, concurrency);
+    const controllers: AbortController[] = [];
+
+    const promises = batch.map((item) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+      return run(item, controller.signal);
+    });
+
+    try {
+      const result = await Promise.any(promises);
+      controllers.forEach((controller) => {
+        try {
+          controller.abort();
+        } catch (e) {
+          // ignore
+        }
+      });
+      return result;
+    } catch (err) {
+      const agg = err as AggregateError;
+      if (agg && Array.isArray((agg as any).errors)) {
+        const batchErrors = (agg as any).errors;
+        for (let i = 0; i < batchErrors.length; i++) {
+          errors.push({ item: getItemLabel(batch[i]), error: batchErrors[i] });
+        }
+      } else {
+        errors.push({ item: batch.map(getItemLabel).join(', '), error: err });
+      }
+    } finally {
+      controllers.forEach((controller) => {
+        try {
+          controller.abort();
+        } catch (e) {
+          // ignore
+        }
+      });
+    }
+  }
+
+  const errorSummary = errors.map((entry) => `${entry.item}: ${entry.error}`).join('; ');
+  throw new Error(`All concurrent requests failed. Errors: ${errorSummary}`);
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return btoa(binary);
 }
 
 // Fisher-Yates shuffle
