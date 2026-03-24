@@ -90,14 +90,18 @@
         </s-search>
       </div>
       <div class="center" style="margin: 16px">
+        显示图片
+        <s-switch style="margin-left: 16px;" on:change="showImg = $event.target.checked"></s-switch>
+      </div>
+      <div class="center" style="margin: 16px">
         <x-if :value="loadingComicInfo">
           <s-circular-progress indeterminate="true"></s-circular-progress>
         </x-if>
         <x-else-if :value="comicInfo.name">
           <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
-              <x-if :value="comicInfo.id">
-                <img attr:src="coverImgUrl()" style="height: 160px;" on:error="imgErrorTimes++" />
+              <x-if :value="comicInfo.id && showImg">
+                <img attr:src="coverImgUrl()" attr:alt="comicInfo.name || ('JM ' + comicInfo.id)" style="height: 160px;" on:error="imgErrorTimes++" />
               </x-if>
             </div>
             <div slot="headline"><a attr:href="'https://18comic.vip/album/' + comicInfo.id" target="_blank">{{comicInfo.name}}</a></div>
@@ -181,8 +185,8 @@
                 <x-fill :value="comicInfo.related_list">
                   <s-card class="related-card">
                     <div slot="image">
-                      <x-if :value="$data.id">
-                        <img attr:src="$host.imgUrl($data.id)" on:error="$host.imgErrorTimes[$data.id]++" />
+                      <x-if :value="$data.id && $host.showImg">
+                        <img attr:src="$host.imgUrl($data.id)" attr:alt="$data.name || ('JM ' + $data.id)" on:error="$host.imgErrorTimes[$data.id]++" />
                       </x-if>
                     </div>
                     <div slot="headline"><a attr:href="'https://18comic.vip/album/' + $data.id" target="_blank">{{ $data.name }}</a></div>
@@ -242,6 +246,7 @@
       <script>
         export default {
           data: {
+            showImg: false,
             jmid: '',
             comicInfo: {},
             searchResult: [],
