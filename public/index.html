@@ -128,8 +128,8 @@
             <x-if :value="comicInfo.series && Array.isArray(comicInfo.series) && comicInfo.series.length">
               <div slot="text">系列：
                 <x-fill :value="comicInfo.series">
-                  <s-chip clickable="false">
-                    {{ $data }}
+                  <s-chip attr:clickable="$data.id" on:click="$host.getJmComicInfo($data.id)">
+                    第{{ $data.sort }}话 {{ $data.name }}
                   </s-chip>
                 </x-fill>
               </div>
@@ -391,6 +391,9 @@
                 return `data:image/jpeg;base64,${this.comicInfo.cover_base64}`;
               }
               return this.imgUrl(this.comicInfo?.id);
+            },
+            openUrl(url) {
+              window.open(url, '_blank');
             }
           }
         }

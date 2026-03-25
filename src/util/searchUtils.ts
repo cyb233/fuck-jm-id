@@ -1,11 +1,11 @@
 export const sites = [
   {
-    logo: 'https://18comic.vip/favicon.ico',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=18comic.vip',
     name: 'JmComic',
     search: (title: string) => `https://18comic.vip/search/photos?main_tag=0&search_query=${encodeURIComponent(title)}`,
   },
   {
-    logo: 'https://e-hentai.org/favicon.ico',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=e-hentai.org',
     name: 'E-Hentai',
     search: (title: string) => `https://e-hentai.org/?f_search=${encodeURIComponent(title)}`,
   },
@@ -15,22 +15,22 @@ export const sites = [
     search: (title: string) => `https://exhentai.org/?f_search=${encodeURIComponent(title)}`,
   },
   {
-    logo: 'https://nhentai.net/favicon.ico',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=nhentai.net',
     name: 'nhentai',
     search: (title: string) => `https://nhentai.net/search/?q=${encodeURIComponent(title)}`,
   },
   {
-    logo: 'https://ltn.gold-usergeneratedcontent.net/favicon-192x192.png',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=hitomi.la',
     name: 'Hitomi',
     search: (title: string) => `https://hitomi.la/search.html?${encodeURIComponent(title)}`,
   },
   {
-    logo: 'https://www.dlsite.com/images/web/common/favicon.ico',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=dlsite.com',
     name: 'DLsite',
     search: (title: string) => `https://www.dlsite.com/home/topsearch/=/keyword/${title.split(' ').map(encodeURIComponent).join('+')}`,
   },
   {
-    logo: 'https://www.pixiv.net/favicon.ico',
+    logo: 'https://www.google.com/s2/favicons?sz=64&domain=pixiv.net',
     name: 'Pixiv',
     search: (title: string) => `https://www.pixiv.net/tags/${encodeURIComponent(title)}/artworks?p=1&s_mode=s_tag`,
   },
