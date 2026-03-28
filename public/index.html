@@ -289,7 +289,7 @@
             // 首次加载时从hash中读取jmid值
             const hash = window.location.hash;
             if (hash && hash.length > 1) {
-              this.jmid = hash.substring(1); // 去掉#符号
+              this.jmid = decodeURIComponent(hash.substring(1)); // 去掉#符号
               this.updateSearch();
               this.getJmComicInfo();
             }
@@ -324,11 +324,14 @@
           },
           proto: {
             formatJMID(jmid) {
+              jmid = jmid.trim();
               // 去除字符，如果存在文本"JM"，提取到后面的数字部分，否则去除所有非数字字符
               if (/JM?\s*\d*/i.test(jmid)) {
-                return jmid.replace(/(JM?)\s*(\d*)/i, '$1$2');
+                jmid = jmid.replace(/^[\S\s]*?(JM?)\s*(\d*)[\S\s]*?$/i, '$1$2');
+              } else {
+                jmid = jmid.replace(/\D/g, '');
               }
-              return jmid.replace(/\D/g, '');
+              return jmid;
             },
             async getJmComicInfo(jmid = this.jmid) {
               this.clearAlerts();
