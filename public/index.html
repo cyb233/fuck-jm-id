@@ -77,6 +77,37 @@
         .related-card img {
           height: 160px;
         }
+
+        .search-history {
+          display: flex;
+          gap: 8px;
+          max-width: min(720px, calc(100vw - 32px));
+          margin: 8px auto 0;
+          padding: 2px 0 6px;
+          overflow-x: auto;
+          overscroll-behavior-x: contain;
+          white-space: nowrap;
+        }
+
+        .search-history s-tooltip {
+          flex: 0 0 auto;
+        }
+
+        .search-history s-tooltip::part(popup) {
+          max-width: min(520px, calc(100vw - 32px));
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+
+        .history-chip {
+          max-width: 220px;
+        }
+
+        .history-chip-searched:not([checked=true]) {
+          --s-color-surface-container-high: #eef0f2;
+          --s-color-on-surface: #70787d;
+          opacity: .76;
+        }
       </style>
       <l-m src="./component/github-corner.html"></l-m>
       <github-corner href="https://github.com/cyb233/fuck-jm-id"></github-corner>
@@ -88,6 +119,25 @@
             <s-icon name="close"></s-icon>
           </s-icon-button>
         </s-search>
+        <x-if :value="searchHistory.length">
+          <div class="search-history">
+            <x-fill :value="searchHistory">
+              <x-if :value="$data.title">
+                <s-tooltip align="top">
+                  <s-chip slot="trigger" class="history-chip" class:history-chip-searched="$data.searched && !$data.current" clickable="false" attr:checked="$data.current" on:click="$host.searchByJmid($data.id)">
+                    {{ $data.id }}
+                  </s-chip>
+                  {{ $data.title }}
+                </s-tooltip>
+              </x-if>
+              <x-else>
+                <s-chip class="history-chip" class:history-chip-searched="$data.searched && !$data.current" clickable="false" attr:checked="$data.current" on:click="$host.searchByJmid($data.id)">
+                  {{ $data.id }}
+                </s-chip>
+              </x-else>
+            </x-fill>
+          </div>
+        </x-if>
       </div>
       <div class="center" style="margin: 16px">
         显示图片
@@ -128,7 +178,7 @@
             <x-if :value="comicInfo.series && Array.isArray(comicInfo.series) && comicInfo.series.length">
               <div slot="text">系列：
                 <x-fill :value="comicInfo.series">
-                  <s-chip attr:clickable="$data.id" on:click="$host.getJmComicInfo($data.id)">
+                  <s-chip attr:clickable="$data.id" on:click="$host.searchByJmid($data.id)">
                     第{{ $data.sort }}话 {{ $data.name }}
                   </s-chip>
                 </x-fill>
@@ -196,7 +246,7 @@
                         {{ $data?.author }}
                       </x-if>
                     </div>
-                    <s-button slot="action" on:click="$host.getJmComicInfo($data.id)">
+                    <s-button slot="action" on:click="$host.searchByJmid($data.id)">
                       ID：{{ $data.id }}
                       <s-icon name="search" slot="end"></s-icon>
                     </s-button>
@@ -248,6 +298,8 @@
           data: {
             showImg: false,
             jmid: '',
+            currentJmid: '',
+            searchHistory: [],
             comicInfo: {},
             searchResult: [],
             loadingComicInfo: false,
@@ -255,34 +307,13 @@
             imgErrorTimes: {},
             imeStatus: false,
           },
-          watch: {
-            jmid(val) {
-              if (this.imeStatus) {
-                return;
-              }
-              this.jmid = this.formatJMID(this.jmid);
-              this.updateSearch();
-              // 同步jmid到URL hash
-              if (val) {
-                window.location.hash = `#${val}`;
-              } else {
-                // 如果jmid为空，清除hash
-                history.replaceState(null, null, window.location.pathname + window.location.search);
-              }
-            },
-          },
           ready() {
             // 回车键搜索
             const search = this.shadow.$('#search');
             search.on('keyup', e => {
-              if (e.keyCode === 13) {
-                if (!this.comicInfo.id || this.comicInfo.id != this.jmid || !this.comicInfo.name) {
-                  e.preventDefault();
-                  this.comicInfo = {};
-                  this.searchResult = [];
-                  this.imgErrorTimes = {};
-                  this.getJmComicInfo();
-                }
+              if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                this.searchFromInput();
               }
             });
 
@@ -291,18 +322,18 @@
             if (hash && hash.length > 1) {
               this.jmid = decodeURIComponent(hash.substring(1)); // 去掉#符号
               this.updateSearch();
-              this.getJmComicInfo();
+              this.searchByJmid(this.jmid);
             }
 
             // 监听hash变化
             window.addEventListener('hashchange', () => {
               const newHash = window.location.hash;
               if (newHash && newHash.length > 1) {
-                const newJmid = newHash.substring(1);
+                const newJmid = decodeURIComponent(newHash.substring(1));
                 if (this.jmid !== newJmid) {
                   this.jmid = newJmid;
                   this.updateSearch();
-                  this.getJmComicInfo();
+                  this.searchByJmid(newJmid);
                 }
               } else {
                 if (this.jmid !== '') {
@@ -318,43 +349,153 @@
             });
             window.addEventListener('compositionend', () => {
               this.imeStatus = false;
-              this.jmid = this.formatJMID(this.jmid);
-              this.updateSearch();
             });
           },
           proto: {
             formatJMID(jmid) {
-              jmid = jmid.trim();
-              // 去除字符，如果存在文本"JM"，提取到后面的数字部分，否则去除所有非数字字符
-              if (/JM?\s*\d*/i.test(jmid)) {
-                jmid = jmid.replace(/^[\S\s]*?(JM?)\s*(\d*)[\S\s]*?$/i, '$1$2');
-              } else {
-                jmid = jmid.replace(/\D/g, '');
-              }
-              return jmid;
+              const input = String(jmid || '').trim();
+              const matches = input.match(/JM\s*\d+|\d+/gi) || [];
+              const seen = new Set();
+              return matches
+                .map(item => {
+                  const id = item.replace(/\D/g, '');
+                  return id ? `JM${id}` : '';
+                })
+                .filter(item => {
+                  if (!item || seen.has(item)) {
+                    return false;
+                  }
+                  seen.add(item);
+                  return true;
+                });
             },
-            async getJmComicInfo(jmid = this.jmid) {
-              this.clearAlerts();
-              if (!/(JM)?\d+/i.test(jmid)) {
+            searchFromInput() {
+              if (this.imeStatus) {
                 return;
               }
-              this.jmid = jmid;
+              const jmids = this.formatJMID(this.jmid);
+              if (!jmids.length) {
+                return;
+              }
+              this.upsertSearchHistory(jmids, jmids[0]);
+              this.searchByJmid(jmids[0], { keepHistoryOrder: true });
+            },
+            async searchByJmid(jmid = this.jmid, options = {}) {
+              this.clearAlerts();
+              const jmids = this.formatJMID(jmid);
+              const targetJmid = jmids[0];
+              if (!targetJmid) {
+                return;
+              }
+              if (!options.keepHistoryOrder) {
+                this.upsertSearchHistory([targetJmid], targetJmid);
+              }
+              this.currentJmid = targetJmid;
+              this.markCurrentHistory(targetJmid);
+              this.jmid = targetJmid;
               this.updateSearch();
+              this.updateHash(targetJmid);
+              const currentInfoJmid = this.formatJMID(this.comicInfo?.id)[0];
+              if (this.comicInfo.name && currentInfoJmid === targetJmid) {
+                this.updateSearchHistoryItem(targetJmid, {
+                  searched: true,
+                  title: this.comicInfo.name,
+                });
+                return;
+              }
+              this.comicInfo = {};
+              this.searchResult = [];
               this.loadingComicInfo = true;
               this.imgErrorTimes = {};
               try {
-                const jmComicInfoResp = await fetch(`/getInfo/${encodeURIComponent(jmid)}`)
+                const jmComicInfoResp = await fetch(`/getInfo/${encodeURIComponent(targetJmid)}`)
                 const jmComicInfo = await jmComicInfoResp.json()
                 if (jmComicInfo.error) {
                   throw new Error(jmComicInfo.error);
                 }
                 this.comicInfo = jmComicInfo.comicInfo || {};
                 this.searchResult = jmComicInfo.searchResult || [];
+                if (this.comicInfo.name) {
+                  this.updateSearchHistoryItem(targetJmid, {
+                    searched: true,
+                    title: this.comicInfo.name,
+                  });
+                }
               } catch (err) {
                 console.error(err);
                 this.comicInfoAlert = err.message || '获取漫画信息失败';
               } finally {
                 this.loadingComicInfo = false;
+              }
+            },
+            upsertSearchHistory(jmids, searchedJmid) {
+              const normalizedJmids = [];
+              const movedIds = new Set();
+              for (const jmid of jmids) {
+                for (const normalizedJmid of this.formatJMID(jmid)) {
+                  if (!movedIds.has(normalizedJmid)) {
+                    normalizedJmids.push(normalizedJmid);
+                    movedIds.add(normalizedJmid);
+                  }
+                }
+              }
+              if (!normalizedJmids.length) {
+                return;
+              }
+              const normalizedSearchedJmid = this.formatJMID(searchedJmid)[0];
+              const previousItems = new Map(this.searchHistory.map(item => [item.id, item]));
+              const movedItems = [];
+              for (const id of normalizedJmids) {
+                const previousItem = previousItems.get(id) || {};
+                movedItems.unshift({
+                  id,
+                  searched: Boolean(previousItem.searched || id === normalizedSearchedJmid),
+                  title: previousItem.title || '',
+                  current: id === this.currentJmid,
+                });
+              }
+              const remainingItems = this.searchHistory.filter(item => !movedIds.has(item.id));
+              this.searchHistory = [...movedItems, ...remainingItems];
+            },
+            updateSearchHistoryItem(jmid, patch) {
+              const targetJmid = this.formatJMID(jmid)[0];
+              if (!targetJmid) {
+                return;
+              }
+              const index = this.searchHistory.findIndex(item => item.id === targetJmid);
+              if (index === -1) {
+                this.searchHistory = [{
+                  id: targetJmid,
+                  searched: false,
+                  title: '',
+                  current: targetJmid === this.currentJmid,
+                  ...patch,
+                }, ...this.searchHistory];
+                return;
+              }
+              const nextHistory = this.searchHistory.slice();
+              nextHistory[index] = {
+                ...nextHistory[index],
+                ...patch,
+              };
+              this.searchHistory = nextHistory;
+            },
+            markCurrentHistory(jmid) {
+              this.searchHistory = this.searchHistory.map(item => ({
+                ...item,
+                current: item.id === jmid,
+              }));
+            },
+            isCurrentHistory(item) {
+              return item.id === this.currentJmid;
+            },
+            isSearchedHistory(item) {
+              return item.searched && item.id !== this.currentJmid;
+            },
+            updateHash(jmid) {
+              const nextHash = `#${encodeURIComponent(jmid)}`;
+              if (window.location.hash !== nextHash) {
+                window.location.hash = nextHash;
               }
             },
             updateSearch() {
@@ -365,6 +506,7 @@
               this.clearAlerts();
               this.jmid = '';
               this.updateSearch();
+              history.replaceState(null, null, window.location.pathname + window.location.search);
             },
             copyTitle() {
               if (!this.comicInfo.name) {
