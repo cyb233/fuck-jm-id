@@ -78,35 +78,90 @@
           height: 160px;
         }
 
+        .search-history-shell {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: min(720px, 100%);
+          margin: 8px auto 0;
+        }
+
+        .search-history-shell-expanded {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
         .search-history {
           display: flex;
+          flex: 1 1 auto;
           gap: 8px;
-          max-width: min(720px, calc(100vw - 32px));
-          margin: 8px auto 0;
+          min-width: 0;
           padding: 2px 0 6px;
           overflow-x: auto;
           overscroll-behavior-x: contain;
           white-space: nowrap;
         }
 
-        .search-history s-tooltip {
-          flex: 0 0 auto;
+        .search-history-expanded {
+          flex-wrap: wrap;
+          overflow-x: visible;
+          white-space: normal;
         }
 
-        .search-history s-tooltip::part(popup) {
+        .history-item {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          min-width: max-content;
+        }
+
+        .search-history-expanded .history-item {
+          flex: 0 1 auto;
+        }
+
+        .history-item s-tooltip {
+          flex: 0 0 auto;
+          min-width: 0;
+        }
+
+        .history-item s-tooltip::part(popup) {
           max-width: min(520px, calc(100vw - 32px));
           white-space: normal;
           overflow-wrap: anywhere;
+        }
+
+        .history-tooltip-empty::part(popup) {
+          display: none !important;
         }
 
         .history-chip {
           max-width: 220px;
         }
 
-        .history-chip-searched:not([checked=true]) {
+        .history-chip-current {
+          --s-color-surface-container-high: var(--s-color-secondary-container, #cfe6f1);
+          --s-color-on-surface: var(--s-color-primary, #006782);
+        }
+
+        .history-chip-searched {
           --s-color-surface-container-high: #eef0f2;
           --s-color-on-surface: #70787d;
           opacity: .76;
+        }
+
+        .history-delete {
+          width: 28px;
+          height: 28px;
+          padding: 4px;
+          flex: 0 0 auto;
+        }
+
+        .search-history-count {
+          flex: 0 0 auto;
+          line-height: 32px;
+          font-size: .8125rem;
+          color: var(--s-color-on-surface-variant, #40484C);
+          white-space: nowrap;
         }
       </style>
       <l-m src="./component/github-corner.html"></l-m>
@@ -119,89 +174,100 @@
             <s-icon name="close"></s-icon>
           </s-icon-button>
         </s-search>
-        <x-if :value="searchHistory.length">
-          <div class="search-history">
-            <x-fill :value="searchHistory">
-              <x-if :value="$data.title">
-                <s-tooltip align="top">
-                  <s-chip slot="trigger" class="history-chip" class:history-chip-searched="$data.searched && !$data.current" clickable="false" attr:checked="$data.current" on:click="$host.searchByJmid($data.id)">
-                    {{ $data.id }}
-                  </s-chip>
-                  {{ $data.title }}
-                </s-tooltip>
-              </x-if>
-              <x-else>
-                <s-chip class="history-chip" class:history-chip-searched="$data.searched && !$data.current" clickable="false" attr:checked="$data.current" on:click="$host.searchByJmid($data.id)">
-                  {{ $data.id }}
-                </s-chip>
-              </x-else>
-            </x-fill>
+        <o-if :value="searchHistory.length">
+          <div class="search-history-shell" class:search-history-shell-expanded="historyExpanded">
+            <div class="search-history" class:search-history-expanded="historyExpanded">
+              <o-fill :value="searchHistory">
+                <div class="history-item" attr:id="'history-' + $data.id">
+                  <s-tooltip align="top" class:history-tooltip-empty="!$data.title">
+                    <s-chip slot="trigger" class="history-chip" class:history-chip-current="$data.current" class:history-chip-searched="$data.searched && !$data.current" clickable="false" on:click="$host.searchHistoryItem($data.id)">
+                      {{ $data.id }}
+                      <s-icon-button class="history-delete" slot="action" on:click="$host.deleteSearchHistory($data.id, $event)">
+                        <s-icon name="close"></s-icon>
+                      </s-icon-button>
+                    </s-chip>
+                    {{ $data.title || '' }}
+                  </s-tooltip>
+                </div>
+              </o-fill>
+            </div>
+            <span class="search-history-count">共 {{ searchHistory.length }} 条</span>
+            <o-if :value="historyExpanded">
+              <s-icon-button on:click="historyExpanded = false" aria-label="收起搜索历史">
+                <s-icon name="chevron_up"></s-icon>
+              </s-icon-button>
+            </o-if>
+            <o-else>
+              <s-icon-button on:click="historyExpanded = true" aria-label="展开搜索历史">
+                <s-icon name="chevron_down"></s-icon>
+              </s-icon-button>
+            </o-else>
           </div>
-        </x-if>
+        </o-if>
       </div>
       <div class="center" style="margin: 16px">
         显示图片
         <s-switch style="margin-left: 16px;" on:change="showImg = $event.target.checked"></s-switch>
       </div>
       <div class="center" style="margin: 16px">
-        <x-if :value="loadingComicInfo">
+        <o-if :value="loadingComicInfo">
           <s-circular-progress indeterminate="true"></s-circular-progress>
-        </x-if>
-        <x-else-if :value="comicInfo.name">
+        </o-if>
+        <o-else-if :value="comicInfo.name">
           <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
-              <x-if :value="comicInfo.id && showImg">
+              <o-if :value="comicInfo.id && showImg">
                 <img attr:src="coverImgUrl()" attr:alt="comicInfo.name || ('JM ' + comicInfo.id)" style="height: 160px;" on:error="imgErrorTimes++" />
-              </x-if>
+              </o-if>
             </div>
             <div slot="headline"><a attr:href="'https://18comic.vip/album/' + comicInfo.id" target="_blank">{{comicInfo.name}}</a></div>
             <div slot="subhead">
               作者：
-              <x-if :value="comicInfo.author && Array.isArray(comicInfo.author)">
-                <x-fill :value="comicInfo.author">
+              <o-if :value="comicInfo.author && Array.isArray(comicInfo.author)">
+                <o-fill :value="comicInfo.author">
                   <s-chip clickable="false">
                     {{ $data }}
                   </s-chip>
-                </x-fill>
-              </x-if>
+                </o-fill>
+              </o-if>
             </div>
             <div slot="text">ID：{{comicInfo.id}}</div>
-            <x-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
+            <o-if :value="comicInfo.works && Array.isArray(comicInfo.works) && comicInfo.works.length">
               <div slot="text">作品：
-                <x-fill :value="comicInfo.works">
+                <o-fill :value="comicInfo.works">
                   <s-chip clickable="false">
                     {{ $data }}
                   </s-chip>
-                </x-fill>
+                </o-fill>
               </div>
-            </x-if>
-            <x-if :value="comicInfo.series && Array.isArray(comicInfo.series) && comicInfo.series.length">
+            </o-if>
+            <o-if :value="comicInfo.series && Array.isArray(comicInfo.series) && comicInfo.series.length">
               <div slot="text">系列：
-                <x-fill :value="comicInfo.series">
+                <o-fill :value="comicInfo.series">
                   <s-chip attr:clickable="$data.id" on:click="$host.searchByJmid($data.id)">
                     第{{ $data.sort }}话 {{ $data.name }}
                   </s-chip>
-                </x-fill>
+                </o-fill>
               </div>
-            </x-if>
-            <x-if :value="comicInfo.actors && Array.isArray(comicInfo.actors) && comicInfo.actors.length">
+            </o-if>
+            <o-if :value="comicInfo.actors && Array.isArray(comicInfo.actors) && comicInfo.actors.length">
               <div slot="text">角色：
-                <x-fill :value="comicInfo.actors">
+                <o-fill :value="comicInfo.actors">
                   <s-chip clickable="false">
                     {{ $data }}
                   </s-chip>
-                </x-fill>
+                </o-fill>
               </div>
-            </x-if>
-            <x-if :value="comicInfo.tags && Array.isArray(comicInfo.tags) && comicInfo.tags.length">
+            </o-if>
+            <o-if :value="comicInfo.tags && Array.isArray(comicInfo.tags) && comicInfo.tags.length">
               <div slot="text">标签：
-                <x-fill :value="comicInfo.tags">
+                <o-fill :value="comicInfo.tags">
                   <s-chip clickable="false">
                     {{ $data }}
                   </s-chip>
-                </x-fill>
+                </o-fill>
               </div>
-            </x-if>
+            </o-if>
             <div slot="text">
               <s-chip clickable="false">
                 浏览量：{{comicInfo?.total_views || 0}}
@@ -216,9 +282,9 @@
                 上传时间：{{comicInfo?.addtime ? new Date(comicInfo.addtime * 1000).toLocaleString() : '-'}}
               </s-chip>
             </div>
-            <x-if :value="comicInfo.description">
+            <o-if :value="comicInfo.description">
               <div slot="text">简介：{{comicInfo?.description}}</div>
-            </x-if>
+            </o-if>
             <s-button slot="action" on:click="copyTitle()">
               <s-icon slot="start">
                 <svg viewBox="0 -960 960 960">
@@ -228,35 +294,35 @@
               复制完整标题
             </s-button>
           </s-card>
-          <x-if :value="comicInfo.related_list && Array.isArray(comicInfo.related_list) && comicInfo.related_list.length">
+          <o-if :value="comicInfo.related_list && Array.isArray(comicInfo.related_list) && comicInfo.related_list.length">
             <s-fold folded="true">
               <s-button slot="trigger" style="margin: 16px;">相关推荐</s-button>
               <div class="related-list" style="margin: 16px;">
-                <x-fill :value="comicInfo.related_list">
+                <o-fill :value="comicInfo.related_list">
                   <s-card class="related-card">
                     <div slot="image">
-                      <x-if :value="$data.id && $host.showImg">
+                      <o-if :value="$data.id && $host.showImg">
                         <img attr:src="$host.imgUrl($data.id)" attr:alt="$data.name || ('JM ' + $data.id)" on:error="$host.imgErrorTimes[$data.id]++" />
-                      </x-if>
+                      </o-if>
                     </div>
                     <div slot="headline"><a attr:href="'https://18comic.vip/album/' + $data.id" target="_blank">{{ $data.name }}</a></div>
                     <div slot="subhead">
                       作者：
-                      <x-if :value="$data.author">
+                      <o-if :value="$data.author">
                         {{ $data?.author }}
-                      </x-if>
+                      </o-if>
                     </div>
                     <s-button slot="action" on:click="$host.searchByJmid($data.id)">
                       ID：{{ $data.id }}
                       <s-icon name="search" slot="end"></s-icon>
                     </s-button>
                   </s-card>
-                </x-fill>
+                </o-fill>
               </div>
             </s-fold>
-          </x-if>
-        </x-else-if>
-        <x-else>
+          </o-if>
+        </o-else-if>
+        <o-else>
           <s-empty>暂时没有数据</s-empty>
           <s-alert id="alert" type="error" class:hide="!comicInfoAlert">
             {{ comicInfoAlert }}
@@ -264,31 +330,31 @@
               <s-icon name="close"></s-icon>
             </s-icon-button>
           </s-alert>
-        </x-else>
+        </o-else>
       </div>
       <div class="center" style="margin: 16px">
-        <x-if :value="searchResult.length">
+        <o-if :value="searchResult.length">
           <s-table style="overflow: auto; display: block">
             <s-tbody>
-              <x-fill :value="searchResult">
+              <o-fill :value="searchResult">
                 <s-tr>
                   <s-td class="right" style="width: 50%;"><s-icon attr:src="$data.logo"></s-icon>{{ $data.site }}</s-td>
                   <s-td class="left" style="width: 50%;">
-                    <x-if :value="$data.search">
+                    <o-if :value="$data.search">
                       <a attr:href="$data.search" target="_blank">{{ $data.title }}</a>
-                    </x-if>
-                    <x-else>
+                    </o-if>
+                    <o-else>
                       {{ $data.title }}
-                    </x-else>
+                    </o-else>
                   </s-td>
                 </s-tr>
-              </x-fill>
+              </o-fill>
             </s-tbody>
           </s-table>
-        </x-if>
-        <x-else-if :value="comicInfo.name">
+        </o-if>
+        <o-else-if :value="comicInfo.name">
           <s-empty>暂时没有数据</s-empty>
-        </x-else-if>
+        </o-else-if>
       </div>
       <s-snackbar id="copySuccess" type="success">
         复制成功
@@ -300,6 +366,7 @@
             jmid: '',
             currentJmid: '',
             searchHistory: [],
+            historyExpanded: false,
             comicInfo: {},
             searchResult: [],
             loadingComicInfo: false,
@@ -392,6 +459,10 @@
               }
               this.currentJmid = targetJmid;
               this.markCurrentHistory(targetJmid);
+              this.updateSearchHistoryItem(targetJmid, {
+                searched: true,
+              });
+              this.scrollCurrentHistoryIntoView(targetJmid);
               this.jmid = targetJmid;
               this.updateSearch();
               this.updateHash(targetJmid);
@@ -401,6 +472,7 @@
                   searched: true,
                   title: this.comicInfo.name,
                 });
+                this.scrollCurrentHistoryIntoView(targetJmid);
                 return;
               }
               this.comicInfo = {};
@@ -420,12 +492,27 @@
                     searched: true,
                     title: this.comicInfo.name,
                   });
+                  this.scrollCurrentHistoryIntoView(targetJmid);
                 }
               } catch (err) {
                 console.error(err);
                 this.comicInfoAlert = err.message || '获取漫画信息失败';
               } finally {
                 this.loadingComicInfo = false;
+              }
+            },
+            searchHistoryItem(jmid) {
+              return this.searchByJmid(jmid, { keepHistoryOrder: true });
+            },
+            deleteSearchHistory(jmid, event) {
+              event?.stopPropagation?.();
+              const targetJmid = this.formatJMID(jmid)[0];
+              if (!targetJmid) {
+                return;
+              }
+              this.searchHistory = this.searchHistory.filter(item => item.id !== targetJmid);
+              if (!this.searchHistory.length) {
+                this.historyExpanded = false;
               }
             },
             upsertSearchHistory(jmids, searchedJmid) {
@@ -486,11 +573,24 @@
                 current: item.id === jmid,
               }));
             },
-            isCurrentHistory(item) {
-              return item.id === this.currentJmid;
-            },
-            isSearchedHistory(item) {
-              return item.searched && item.id !== this.currentJmid;
+            scrollCurrentHistoryIntoView(jmid = this.currentJmid) {
+              const targetJmid = this.formatJMID(jmid)[0];
+              if (!targetJmid) {
+                return;
+              }
+              setTimeout(() => {
+                let item;
+                try {
+                  item = this.shadow.$(`#history-${targetJmid}`)?.ele;
+                } catch (err) {
+                  item = null;
+                }
+                item?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'nearest',
+                  inline: this.historyExpanded ? 'nearest' : 'center',
+                });
+              }, 0);
             },
             updateHash(jmid) {
               const nextHash = `#${encodeURIComponent(jmid)}`;
@@ -536,9 +636,6 @@
                 return `data:image/jpeg;base64,${this.comicInfo.cover_base64}`;
               }
               return this.imgUrl(this.comicInfo?.id);
-            },
-            openUrl(url) {
-              window.open(url, '_blank');
             }
           }
         }
