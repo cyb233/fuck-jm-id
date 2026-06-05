@@ -1,0 +1,23 @@
+export type JmComicInfo = {
+  id: number;
+  name: string | null;
+  images: unknown[];
+  addtime: string | null;
+  description: string;
+  total_views: number | null;
+  likes: number | null;
+  series: unknown[];
+  series_id: number | null;
+  comment_total: boolean;
+  author: string[];
+  tags: string[];
+  works: unknown[];
+  actors: unknown[];
+  related_list: unknown[];
+  liked: boolean;
+  is_favorite: boolean;
+  is_aids: boolean;
+  price: string;
+  purchased: string;
+  cover_base64?: string;
+};

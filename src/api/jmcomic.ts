@@ -1,4 +1,5 @@
 import CryptoJS from 'crypto-js';
+import type { JmComicInfo } from '../types/comic';
 
 const API_URL_DOMAIN_SERVER_LIST = [
   'https://rup4a04-c01.tos-ap-southeast-1.bytepluses.com/newsvr-2025.txt',
@@ -16,47 +17,22 @@ const DOMAIN_IMAGE_LIST = [
   'cdn-msp3.jmapinodeudzn.net',
 ];
 
-const client_key = 'api';
 const APP_VERSION = '2.0.6';
 const APP_TOKEN_SECRET = '18comicAPP';
 const APP_DATA_SECRET = '185Hcomic3PAPP7R';
 const API_DOMAIN_SERVER_SECRET = 'diosfjckwpqpdfjkvnqQjsik';
-const API_SEARCH = '/search';
-const API_CATEGORIES_FILTER = '/categories/filter';
 const API_ALBUM = '/album';
-const API_CHAPTER = '/chapter';
-const API_SCRAMBLE = '/chapter_view_template';
-const API_FAVORITE = '/favorite';
 const DEFAULT_CONCURRENCY = 3;
+const API_LIST_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 8000;
+const API_LIST_CACHE_TTL_MS = 10 * 60 * 1000;
+const API_LIST_FALLBACK_CACHE_TTL_MS = 60 * 1000;
+const COMIC_INFO_CACHE_TTL_MS = 5 * 60 * 1000;
+const COVER_BASE64_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_HEADERS = {
   'Accept-Encoding': 'gzip, deflate',
   'user-agent':
     'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-};
-
-export type JmComicInfo = {
-  id: number;
-  name: string | null;
-  images: unknown[];
-  addtime: string | null;
-  description: string;
-  total_views: number | null;
-  likes: number | null;
-  series: unknown[];
-  series_id: number | null;
-  comment_total: boolean;
-  author: string[];
-  tags: string[];
-  works: unknown[];
-  actors: unknown[];
-  related_list: unknown[];
-  liked: boolean;
-  is_favorite: boolean;
-  is_aids: boolean;
-  price: string;
-  purchased: string;
-  // 额外添加封面图片base64字段
-  cover_base64?: string;
 };
 
 type ConcurrentRequestOptions<TItem, TResult> = {
@@ -66,173 +42,231 @@ type ConcurrentRequestOptions<TItem, TResult> = {
   run: (item: TItem, signal: AbortSignal) => Promise<TResult>;
 };
 
-async function getJMApiList(): Promise<string[]> {
-  for (const url of API_URL_DOMAIN_SERVER_LIST) {
-    try {
-      console.log('Fetching', url);
-      const resp = await fetch(url, {
-        method: 'GET',
-        headers: {
-          ...DEFAULT_HEADERS,
-        },
-      });
-      if (!resp.ok) {
-        console.error('HTTP error! status:', resp.status);
-        continue;
-      }
-      let text = await resp.text();
-      // todo 解密
-      text = text.replace(/^[^A-Za-z]+/, '');
-      const decrypted = decodeRespData(text, '', API_DOMAIN_SERVER_SECRET);
-      console.log('decrypted:', decrypted);
-      // 解析JSON
-      const data = JSON.parse(decrypted);
-      if (!data || !data.Server) {
-        console.error('Invalid JSON:', data);
-        continue;
-      }
-      // 返回JSON
-      return data.Server;
-    } catch (error) {
-      console.error(error);
-      continue;
-    }
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+class HttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
   }
-  return DOMAIN_API_LIST;
 }
 
-async function loadCoverBase64(jmid: string): Promise<string> {
-  try {
-    return await requestWithConcurrency({
-      items: shuffleArray(DOMAIN_IMAGE_LIST),
-      run: async (domain, signal) => {
-        const coverUrl = `https://${domain}/media/albums/${jmid}.jpg`;
-        console.log(`Fetching ${coverUrl}`);
+let apiListCache: CacheEntry<string[]> | null = null;
+let apiListPromise: Promise<string[]> | null = null;
+const comicInfoCache = new Map<string, CacheEntry<JmComicInfo>>();
+const coverBase64Cache = new Map<string, CacheEntry<string>>();
+const comicInfoPromises = new Map<string, Promise<JmComicInfo>>();
+const coverBase64Promises = new Map<string, Promise<string>>();
 
-        const resp = await fetch(coverUrl, {
+async function getJMApiList(): Promise<string[]> {
+  const cachedApiList = getCacheValue(apiListCache);
+  if (cachedApiList) {
+    return cachedApiList;
+  }
+
+  if (apiListPromise) {
+    return apiListPromise;
+  }
+
+  apiListPromise = loadJMApiList().finally(() => {
+    apiListPromise = null;
+  });
+
+  return apiListPromise;
+}
+
+async function loadJMApiList(): Promise<string[]> {
+  for (const url of API_URL_DOMAIN_SERVER_LIST) {
+    try {
+      const resp = await fetchWithTimeout(
+        url,
+        {
           method: 'GET',
           headers: {
             ...DEFAULT_HEADERS,
           },
-          signal,
-        });
+        },
+        API_LIST_TIMEOUT_MS,
+      );
 
-        if (!resp.ok) {
-          throw new Error(`HTTP error! status: ${resp.status}`);
-        }
+      if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+      }
 
-        const imageBuffer = await resp.arrayBuffer();
-        return arrayBufferToBase64(imageBuffer);
-      },
-    });
-  } catch (error) {
-    console.error(error);
+      let text = await resp.text();
+      text = text.replace(/^[^A-Za-z]+/, '');
+      const decrypted = decodeRespData(text, '', API_DOMAIN_SERVER_SECRET);
+      const data = JSON.parse(decrypted) as { Server?: unknown };
+      const apiList = Array.isArray(data.Server)
+        ? data.Server.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+        : [];
+
+      if (apiList.length === 0) {
+        throw new Error('Invalid API domain list response');
+      }
+
+      apiListCache = {
+        value: apiList,
+        expiresAt: Date.now() + API_LIST_CACHE_TTL_MS,
+      };
+      return apiList;
+    } catch (error) {
+      console.error(`Failed to load API domain list from ${url}:`, error);
+    }
   }
-  return '';
+
+  apiListCache = {
+    value: DOMAIN_API_LIST,
+    expiresAt: Date.now() + API_LIST_FALLBACK_CACHE_TTL_MS,
+  };
+  return DOMAIN_API_LIST;
+}
+
+async function loadCoverBase64(jmid: string): Promise<string> {
+  const cachedCoverBase64 = getMapCacheValue(coverBase64Cache, jmid);
+  if (cachedCoverBase64 !== undefined) {
+    return cachedCoverBase64;
+  }
+
+  const pendingPromise = coverBase64Promises.get(jmid);
+  if (pendingPromise) {
+    return pendingPromise;
+  }
+
+  const promise = (async () => {
+    try {
+      const coverBase64 = await requestWithConcurrency({
+        items: shuffleArray(DOMAIN_IMAGE_LIST),
+        run: async (domain, signal) => {
+          const coverUrl = `https://${domain}/media/albums/${jmid}.jpg`;
+          const resp = await fetchWithTimeout(
+            coverUrl,
+            {
+              method: 'GET',
+              headers: {
+                ...DEFAULT_HEADERS,
+              },
+            },
+            REQUEST_TIMEOUT_MS,
+            signal,
+          );
+
+          if (!resp.ok) {
+            throw new Error(`HTTP error! status: ${resp.status}`);
+          }
+
+          const imageBuffer = await resp.arrayBuffer();
+          return arrayBufferToBase64(imageBuffer);
+        },
+      });
+
+      setMapCacheValue(coverBase64Cache, jmid, coverBase64, COVER_BASE64_CACHE_TTL_MS);
+      return coverBase64;
+    } catch (error) {
+      console.error(`Failed to load cover image for JM ${jmid}:`, error);
+      setMapCacheValue(coverBase64Cache, jmid, '', API_LIST_FALLBACK_CACHE_TTL_MS);
+      return '';
+    }
+  })().finally(() => {
+    coverBase64Promises.delete(jmid);
+  });
+
+  coverBase64Promises.set(jmid, promise);
+  return promise;
 }
 
 export async function getJmComicInfo(jmid: string): Promise<JmComicInfo> {
   const id = formatId(jmid);
   if (!id) {
-    throw new Error('无效的jmid');
+    throw new HttpError(400, '无效的jmid');
   }
 
-  // 获取API列表并打乱顺序以保证随机性
-  const apiList = await getJMApiList();
-  if (!apiList || apiList.length === 0) {
-    throw new Error('No API domains available');
+  const [comicInfo, coverBase64] = await Promise.all([
+    loadComicInfo(id),
+    loadCoverBase64(id),
+  ]);
+
+  return {
+    ...comicInfo,
+    cover_base64: coverBase64,
+  };
+}
+
+async function loadComicInfo(id: string): Promise<JmComicInfo> {
+  const cachedComicInfo = getMapCacheValue(comicInfoCache, id);
+  if (cachedComicInfo) {
+    return cachedComicInfo;
   }
-  console.log('API domains:', apiList);
 
-  const result = await requestWithConcurrency({
-    items: shuffleArray(apiList),
-    run: async (domain, signal): Promise<JmComicInfo> => {
-      const baseUrl = `https://${domain}`;
-      const params = new URLSearchParams({ id: id }).toString();
-      const url = `${baseUrl}${API_ALBUM}?${params}`;
-      console.log(`Fetching ${url}`);
+  const pendingPromise = comicInfoPromises.get(id);
+  if (pendingPromise) {
+    return pendingPromise;
+  }
 
-      // 每个请求使用独立的时间戳
-      const timestamp = Math.floor(Date.now() / 1000);
-      const tokenparam = `${timestamp},${APP_VERSION}`;
-      const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
+  const promise = (async () => {
+    const apiList = await getJMApiList();
+    if (apiList.length === 0) {
+      throw new HttpError(502, 'No API domains available');
+    }
 
-      let resp;
-      try {
-        resp = await fetch(url, {
-          method: 'GET',
-          headers: {
-            ...DEFAULT_HEADERS,
-            token: token,
-            tokenparam: tokenparam,
-          },
-          signal,
-        });
+    try {
+      const comicInfo = await requestWithConcurrency({
+        items: shuffleArray(apiList),
+        run: async (domain, signal): Promise<JmComicInfo> => {
+          const baseUrl = `https://${domain}`;
+          const params = new URLSearchParams({ id }).toString();
+          const url = `${baseUrl}${API_ALBUM}?${params}`;
 
-        if (!resp.ok) {
-          const errorMsg = `HTTP error! status: ${resp.status}`;
-          console.error(errorMsg);
-          throw new Error(errorMsg);
-        }
-      } catch (error) {
-        if ((error as any)?.name === 'AbortError') {
-          throw new Error(`Request aborted for domain ${domain}`);
-        }
-        if (resp) {
-          try {
-            const text = await resp.text();
-            console.error(text);
-          } catch (e) {
-            // ignore
+          const timestamp = Math.floor(Date.now() / 1000);
+          const tokenparam = `${timestamp},${APP_VERSION}`;
+          const token = CryptoJS.MD5(`${timestamp},${APP_TOKEN_SECRET}`).toString();
+
+          const resp = await fetchWithTimeout(
+            url,
+            {
+              method: 'GET',
+              headers: {
+                ...DEFAULT_HEADERS,
+                token,
+                tokenparam,
+              },
+            },
+            REQUEST_TIMEOUT_MS,
+            signal,
+          );
+
+          if (!resp.ok) {
+            throw new Error(`HTTP error! status: ${resp.status}`);
           }
-        }
-        throw new Error(`Fetch failed for domain ${domain}: ${error}`);
-      }
 
-      const json: { code: number; data: string } = await resp.json();
-      console.log(domain, 'json:', json);
-      const data = json.data;
+          const json = (await resp.json()) as { code?: number; data?: unknown };
+          if (typeof json.data !== 'string' || json.data.length === 0) {
+            throw new Error('Missing encrypted response data');
+          }
 
-      const decryptedData = decodeRespData(data, timestamp);
-      let parsedData;
-      try {
-        parsedData = JSON.parse(decryptedData);
-      } catch (error) {
-        console.error('Error parsing JSON:', error);
-        console.log('data:', data);
-        console.log('decryptedData:', decryptedData);
-        throw new Error(`Failed to parse decrypted data from domain ${domain}: ${error}`);
-      }
-      console.log('parsedData:', parsedData);
+          const decryptedData = decodeRespData(json.data, timestamp);
+          const parsedData = JSON.parse(decryptedData);
+          return normalizeComicInfo(parsedData);
+        },
+      });
 
-      return {
-        id: parsedData.id || 0,
-        name: parsedData.name || null,
-        images: parsedData.images || [],
-        addtime: parsedData.addtime || null,
-        description: parsedData.description || '',
-        total_views: parsedData.total_views || null,
-        likes: parsedData.likes || null,
-        series: parsedData.series || [],
-        series_id: parsedData.series_id || null,
-        comment_total: parsedData.comment_total || false,
-        author: parsedData.author || [],
-        tags: parsedData.tags || [],
-        works: parsedData.works || [],
-        actors: parsedData.actors || [],
-        related_list: parsedData.related_list || [],
-        liked: parsedData.liked || false,
-        is_favorite: parsedData.is_favorite || false,
-        is_aids: parsedData.is_aids || false,
-        price: parsedData.price || '',
-        purchased: parsedData.purchased || '',
-      };
-    },
+      setMapCacheValue(comicInfoCache, id, comicInfo, COMIC_INFO_CACHE_TTL_MS);
+      return comicInfo;
+    } catch (error) {
+      throw new HttpError(502, `获取漫画信息失败: ${getErrorMessage(error)}`);
+    }
+  })().finally(() => {
+    comicInfoPromises.delete(id);
   });
 
-  const coverBase64 = await loadCoverBase64(id);
-  result.cover_base64 = coverBase64;
-  return result;
+  comicInfoPromises.set(id, promise);
+  return promise;
 }
 
 function decodeRespData(data: string, ts: number | string, secret?: string): string {
@@ -269,15 +303,15 @@ async function requestWithConcurrency<TItem, TResult>({
       controllers.forEach((controller) => {
         try {
           controller.abort();
-        } catch (e) {
+        } catch {
           // ignore
         }
       });
       return result;
     } catch (err) {
       const agg = err as AggregateError;
-      if (agg && Array.isArray((agg as any).errors)) {
-        const batchErrors = (agg as any).errors;
+      if (Array.isArray((agg as { errors?: unknown[] }).errors)) {
+        const batchErrors = (agg as { errors: unknown[] }).errors;
         for (let i = 0; i < batchErrors.length; i++) {
           errors.push({ item: getItemLabel(batch[i]), error: batchErrors[i] });
         }
@@ -288,15 +322,112 @@ async function requestWithConcurrency<TItem, TResult>({
       controllers.forEach((controller) => {
         try {
           controller.abort();
-        } catch (e) {
+        } catch {
           // ignore
         }
       });
     }
   }
 
-  const errorSummary = errors.map((entry) => `${entry.item}: ${entry.error}`).join('; ');
+  const errorSummary = errors.map((entry) => `${entry.item}: ${getErrorMessage(entry.error)}`).join('; ');
   throw new Error(`All concurrent requests failed. Errors: ${errorSummary}`);
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+  parentSignal?: AbortSignal,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  const abortFromParent = () => {
+    controller.abort(parentSignal?.reason ?? new DOMException('Aborted', 'AbortError'));
+  };
+
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abortFromParent();
+    } else {
+      parentSignal.addEventListener('abort', abortFromParent, { once: true });
+    }
+  }
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    if (parentSignal) {
+      parentSignal.removeEventListener('abort', abortFromParent);
+    }
+  }
+}
+
+function normalizeComicInfo(parsedData: Record<string, unknown>): JmComicInfo {
+  return {
+    id: typeof parsedData.id === 'number' ? parsedData.id : Number(parsedData.id) || 0,
+    name: typeof parsedData.name === 'string' ? parsedData.name : null,
+    images: Array.isArray(parsedData.images) ? parsedData.images : [],
+    addtime: typeof parsedData.addtime === 'string' ? parsedData.addtime : null,
+    description: typeof parsedData.description === 'string' ? parsedData.description : '',
+    total_views: typeof parsedData.total_views === 'number' ? parsedData.total_views : Number(parsedData.total_views) || null,
+    likes: typeof parsedData.likes === 'number' ? parsedData.likes : Number(parsedData.likes) || null,
+    series: Array.isArray(parsedData.series) ? parsedData.series : [],
+    series_id: typeof parsedData.series_id === 'number' ? parsedData.series_id : Number(parsedData.series_id) || null,
+    comment_total: Boolean(parsedData.comment_total),
+    author: Array.isArray(parsedData.author) ? parsedData.author.filter((item): item is string => typeof item === 'string') : [],
+    tags: Array.isArray(parsedData.tags) ? parsedData.tags.filter((item): item is string => typeof item === 'string') : [],
+    works: Array.isArray(parsedData.works) ? parsedData.works : [],
+    actors: Array.isArray(parsedData.actors) ? parsedData.actors : [],
+    related_list: Array.isArray(parsedData.related_list) ? parsedData.related_list : [],
+    liked: Boolean(parsedData.liked),
+    is_favorite: Boolean(parsedData.is_favorite),
+    is_aids: Boolean(parsedData.is_aids),
+    price: typeof parsedData.price === 'string' ? parsedData.price : '',
+    purchased: typeof parsedData.purchased === 'string' ? parsedData.purchased : '',
+  };
+}
+
+function getCacheValue<T>(cacheEntry: CacheEntry<T> | null): T | null {
+  if (!cacheEntry) {
+    return null;
+  }
+  if (cacheEntry.expiresAt <= Date.now()) {
+    return null;
+  }
+  return cacheEntry.value;
+}
+
+function getMapCacheValue<T>(cache: Map<string, CacheEntry<T>>, key: string): T | undefined {
+  const cacheEntry = cache.get(key);
+  if (!cacheEntry) {
+    return undefined;
+  }
+  if (cacheEntry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return cacheEntry.value;
+}
+
+function setMapCacheValue<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number): void {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -323,10 +454,19 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
-function formatId(jmid: string): string {
-  // 去除字符，如果存在文本"JM"，提取后面的数字部分，否则去除所有非数字字符
-  if (jmid.includes('JM')) {
-    return jmid.replace(/JM\s*(\d+)/i, '$1');
+export function formatId(jmid: string): string {
+  const prefixedId = jmid.match(/JM\s*(\d+)/i);
+  if (prefixedId) {
+    return prefixedId[1];
   }
   return jmid.replace(/\D/g, '');
+}
+
+export function resetJmComicCaches(): void {
+  apiListCache = null;
+  apiListPromise = null;
+  comicInfoCache.clear();
+  coverBase64Cache.clear();
+  comicInfoPromises.clear();
+  coverBase64Promises.clear();
 }

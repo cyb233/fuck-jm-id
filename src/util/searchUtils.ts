@@ -1,3 +1,5 @@
+import type { JmComicInfo } from '../types/comic';
+
 export const sites = [
   {
     logo: 'https://www.google.com/s2/favicons?sz=64&domain=18comic.vip',
@@ -72,4 +74,40 @@ export function extractTitle(title?: string | null): string | null {
   }
 
   return title;
+}
+
+function hasNonEmptyString(value?: string | null): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasNonEmptyArray(value?: unknown[]): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function hasNonEmptyStringArray(value?: unknown[]): boolean {
+  return Array.isArray(value) && value.some(item => hasNonEmptyString(typeof item === 'string' ? item : null));
+}
+
+export function hasComicResult(comicInfo?: JmComicInfo | null): boolean {
+  if (!comicInfo) {
+    return false;
+  }
+
+  return (
+    hasNonEmptyString(comicInfo.name)
+    || hasNonEmptyArray(comicInfo.images)
+    || hasNonEmptyString(comicInfo.addtime)
+    || hasNonEmptyString(comicInfo.description)
+    || comicInfo.total_views != null
+    || comicInfo.likes != null
+    || hasNonEmptyArray(comicInfo.series)
+    || comicInfo.series_id != null
+    || hasNonEmptyStringArray(comicInfo.author)
+    || hasNonEmptyStringArray(comicInfo.tags)
+    || hasNonEmptyArray(comicInfo.works)
+    || hasNonEmptyArray(comicInfo.actors)
+    || hasNonEmptyArray(comicInfo.related_list)
+    || hasNonEmptyString(comicInfo.price)
+    || hasNonEmptyString(comicInfo.purchased)
+  );
 }

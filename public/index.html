@@ -138,6 +138,11 @@
           max-width: 220px;
         }
 
+        .history-chip-label-no-result {
+          text-decoration: line-through;
+          text-decoration-thickness: 1.5px;
+        }
+
         .history-chip-current {
           --s-color-surface-container-high: var(--s-color-secondary-container, #cfe6f1);
           --s-color-on-surface: var(--s-color-primary, #006782);
@@ -181,7 +186,7 @@
                 <div class="history-item" attr:id="'history-' + $data.id">
                   <s-tooltip align="top" class:history-tooltip-empty="!$data.title">
                     <s-chip slot="trigger" class="history-chip" class:history-chip-current="$data.current" class:history-chip-searched="$data.searched && !$data.current" clickable="false" on:click="$host.searchHistoryItem($data.id)">
-                      {{ $data.id }}
+                      <span class:history-chip-label-no-result="$data.noResult">{{ $data.id }}</span>
                       <s-icon-button class="history-delete" slot="action" on:click="$host.deleteSearchHistory($data.id, $event)">
                         <s-icon name="close"></s-icon>
                       </s-icon-button>
@@ -213,7 +218,7 @@
         <o-if :value="loadingComicInfo">
           <s-circular-progress indeterminate="true"></s-circular-progress>
         </o-if>
-        <o-else-if :value="comicInfo.name">
+        <o-else-if :value="hasComicResult">
           <s-card style="display: inline-block; max-width: fit-content; padding: 24px;">
             <div slot="image">
               <o-if :value="comicInfo.id && showImg">
@@ -352,7 +357,7 @@
             </s-tbody>
           </s-table>
         </o-if>
-        <o-else-if :value="comicInfo.name">
+        <o-else-if :value="hasComicResult">
           <s-empty>暂时没有数据</s-empty>
         </o-else-if>
       </div>
@@ -368,6 +373,7 @@
             searchHistory: [],
             historyExpanded: false,
             comicInfo: {},
+            hasComicResult: false,
             searchResult: [],
             loadingComicInfo: false,
             comicInfoAlert: '',
@@ -467,15 +473,17 @@
               this.updateSearch();
               this.updateHash(targetJmid);
               const currentInfoJmid = this.formatJMID(this.comicInfo?.id)[0];
-              if (this.comicInfo.name && currentInfoJmid === targetJmid) {
+              if (this.hasComicResult && currentInfoJmid === targetJmid) {
                 this.updateSearchHistoryItem(targetJmid, {
                   searched: true,
                   title: this.comicInfo.name,
+                  noResult: !this.hasComicResult,
                 });
                 this.scrollCurrentHistoryIntoView(targetJmid);
                 return;
               }
               this.comicInfo = {};
+              this.hasComicResult = false;
               this.searchResult = [];
               this.loadingComicInfo = true;
               this.imgErrorTimes = {};
@@ -486,12 +494,14 @@
                   throw new Error(jmComicInfo.error);
                 }
                 this.comicInfo = jmComicInfo.comicInfo || {};
+                this.hasComicResult = Boolean(jmComicInfo.hasComicResult);
                 this.searchResult = jmComicInfo.searchResult || [];
-                if (this.comicInfo.name) {
-                  this.updateSearchHistoryItem(targetJmid, {
-                    searched: true,
-                    title: this.comicInfo.name,
-                  });
+                this.updateSearchHistoryItem(targetJmid, {
+                  searched: true,
+                  title: this.comicInfo.name || '',
+                  noResult: !this.hasComicResult,
+                });
+                if (this.hasComicResult) {
                   this.scrollCurrentHistoryIntoView(targetJmid);
                 }
               } catch (err) {
@@ -538,6 +548,7 @@
                   id,
                   searched: Boolean(previousItem.searched || id === normalizedSearchedJmid),
                   title: previousItem.title || '',
+                  noResult: Boolean(previousItem.noResult),
                   current: id === this.currentJmid,
                 });
               }
@@ -555,6 +566,7 @@
                   id: targetJmid,
                   searched: false,
                   title: '',
+                  noResult: false,
                   current: targetJmid === this.currentJmid,
                   ...patch,
                 }, ...this.searchHistory];

@@ -1,1 +1,1 @@
-export { sites, extractTitle } from './searchUtils';
+export { sites, extractTitle, hasComicResult } from './searchUtils';
