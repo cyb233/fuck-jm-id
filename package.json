@@ -10,11 +10,11 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.14.1",
+		"@cloudflare/vitest-pool-workers": "^0.17.0",
 		"@types/crypto-js": "^4.2.2",
 		"typescript": "^5.5.2",
 		"vitest": "^4.1.0",
-		"wrangler": "^4.80.0"
+		"wrangler": "^4.106.0"
 	},
 	"dependencies": {
 		"cheerio": "^1.1.2",
